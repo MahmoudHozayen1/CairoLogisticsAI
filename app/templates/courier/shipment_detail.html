@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ s.tracking_number }}{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('courier.dashboard') }}" class="text-muted small"><i class="bi bi-arrow-left"></i> Back to deliveries</a>
+
+<div class="d-flex justify-content-between align-items-center my-3 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0 tracking-code">{{ s.tracking_number }}</h3>
+    <span class="badge bg-{{ s.status_color }} fs-6">{{ s.status_label }}</span>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="text-muted text-uppercase small">Deliver to</h6>
+            <div class="fw-bold fs-5">{{ s.receiver_name }}</div>
+            <div><a href="tel:{{ s.receiver_phone }}"><i class="bi bi-telephone"></i> {{ s.receiver_phone }}</a></div>
+            <div class="mt-1"><i class="bi bi-geo-alt text-danger"></i> {{ s.district or s.address or 'Custom location' }}</div>
+            {% if s.landmark %}<div class="text-muted"><em>"{{ s.landmark }}"</em></div>{% endif %}
+            {% if s.cod_amount %}
+            <div class="alert alert-warning mt-3 mb-0"><i class="bi bi-cash-coin"></i> Collect <strong>{{ '%.0f'|format(s.cod_amount) }} EGP</strong> cash on delivery.</div>
+            {% endif %}
+            <a class="btn btn-outline-primary btn-sm mt-3" target="_blank"
+               href="https://www.openstreetmap.org/directions?to={{ s.lat }},{{ s.lon }}">
+               <i class="bi bi-signpost-2"></i> Open directions
+            </a>
+        </div>
+
+        <div class="card card-soft p-0"><div id="map" class="map-box"></div></div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="fw-bold mb-3">Complete delivery</h6>
+            <form action="{{ url_for('courier.mark_delivered', shipment_id=s.id) }}" method="POST" enctype="multipart/form-data">
+                {{ form.hidden_tag() }}
+                <div class="mb-2">{{ form.note.label(class="form-label") }}{{ form.note(class="form-control form-control-sm", placeholder="e.g. handed to receiver") }}</div>
+                <div class="mb-3">{{ form.proof.label(class="form-label") }}{{ form.proof(class="form-control form-control-sm") }}
+                    {% for e in form.proof.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                <button class="btn btn-success w-100"><i class="bi bi-check2-circle"></i> Mark delivered</button>
+            </form>
+            <hr>
+            <form action="{{ url_for('courier.mark_failed', shipment_id=s.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input name="note" class="form-control form-control-sm mb-2" placeholder="Reason (e.g. no answer)">
+                <button class="btn btn-outline-danger w-100"><i class="bi bi-x-circle"></i> Failed attempt</button>
+            </form>
+        </div>
+
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Timeline</h6>
+            {% set shipment = s %}
+            {% include "partials/_timeline.html" with context %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([{{ s.lat }}, {{ s.lon }}], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.marker([{{ s.lat }}, {{ s.lon }}]).addTo(map).bindPopup("{{ s.receiver_name }}").openPopup();
+    setTimeout(() => map.invalidateSize(), 200);
+</script>
+{% endblock %}

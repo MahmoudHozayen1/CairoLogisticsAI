@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Couriers{% endblock %}
+
+{% block content %}
+<h3 class="fw-bold text-primary-dark mb-4"><i class="bi bi-person-badge"></i> Couriers / Fleet</h3>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Add a courier</h6>
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="mb-2">{{ form.name.label(class="form-label") }}{{ form.name(class="form-control form-control-sm") }}
+                    {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                <div class="mb-2">{{ form.email.label(class="form-label") }}{{ form.email(class="form-control form-control-sm") }}
+                    {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                <div class="mb-2">{{ form.phone.label(class="form-label") }}{{ form.phone(class="form-control form-control-sm") }}</div>
+                <div class="mb-2">{{ form.hub_id.label(class="form-label") }}{{ form.hub_id(class="form-select form-select-sm") }}</div>
+                <div class="mb-2">{{ form.vehicle_type.label(class="form-label") }}{{ form.vehicle_type(class="form-select form-select-sm") }}</div>
+                <div class="mb-3">{{ form.password.label(class="form-label") }}{{ form.password(class="form-control form-control-sm") }}
+                    {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                {{ form.submit(class="btn btn-primary w-100") }}
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Fleet ({{ couriers|length }})</h6>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Name</th><th>Hub</th><th>Vehicle</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    {% for c in couriers %}
+                        <tr>
+                            <td><strong>{{ c.name }}</strong><div class="small text-muted">{{ c.email }}</div></td>
+                            <td>{{ c.hub.name if c.hub else '—' }}</td>
+                            <td>{{ c.vehicle_type }}</td>
+                            <td>
+                                {% if c.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+                                {% if c.is_available %}<span class="badge bg-info">Available</span>{% else %}<span class="badge bg-warning text-dark">Off duty</span>{% endif %}
+                            </td>
+                            <td>
+                                <form action="{{ url_for('admin.toggle_courier', courier_id=c.id) }}" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-outline-secondary">{{ 'Deactivate' if c.is_active else 'Activate' }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="5" class="text-muted">No couriers yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

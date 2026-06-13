@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Track a parcel{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card card-soft p-4 mb-4 text-center">
+            <h3 class="fw-bold text-primary-dark mb-3"><i class="bi bi-search"></i> Track your shipment</h3>
+            <form method="POST" class="d-flex justify-content-center">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="input-group input-group-lg" style="max-width:480px;">
+                    <input name="tracking_number" class="form-control tracking-code" value="{{ code or '' }}"
+                           placeholder="e.g. SR-7F3K9Q2A" required>
+                    <button class="btn btn-accent px-4 fw-bold">TRACK</button>
+                </div>
+            </form>
+        </div>
+
+        {% if not_found %}
+        <div class="alert alert-warning text-center">
+            No shipment found for <strong class="tracking-code">{{ code }}</strong>. Please check the number and try again.
+        </div>
+        {% endif %}
+
+        {% if shipment %}
+        <div class="card card-soft overflow-hidden mb-4">
+            <div class="card-header text-white text-center py-4 bg-{{ shipment.status_color }}">
+                {% if eta %}
+                <div class="small text-uppercase opacity-75">Estimated arrival</div>
+                <div class="display-5 fw-bold">{{ eta }}</div>
+                {% endif %}
+                <span class="badge bg-light text-dark px-3 py-2 rounded-pill fw-bold mt-1">{{ shipment.status_label }}</span>
+            </div>
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between border-bottom pb-3 mb-3 flex-wrap">
+                    <div><div class="small text-muted">Tracking number</div><div class="h5 tracking-code mb-0">{{ shipment.tracking_number }}</div></div>
+                    <div class="text-end"><div class="small text-muted">Courier</div><div class="h6 mb-0">{{ shipment.courier.name if shipment.courier else 'Not yet assigned' }}</div></div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="small text-muted">Recipient</div>
+                        <div class="fw-bold">{{ shipment.receiver_name }}</div>
+                        <div class="small"><i class="bi bi-geo-alt text-danger"></i> {{ shipment.district or shipment.address or 'Custom location' }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted">From</div>
+                        <div class="fw-bold">{{ shipment.sender_name }}</div>
+                        <div class="small text-muted">Created {{ shipment.created_at.strftime('%d %b %Y') if shipment.created_at }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Journey</h6>
+            {% include "partials/_timeline.html" with context %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

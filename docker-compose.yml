@@ -1,0 +1,29 @@
+# Spin up a PostgreSQL database for the "real-world" deployment target.
+#
+#   docker compose up -d
+#   $env:DATABASE_URL = "postgresql+psycopg2://swiftroute:swiftroute@localhost:5432/swiftroute"
+#   pip install psycopg2-binary
+#   flask --app run init-db
+#   flask --app run seed
+#
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: swiftroute-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: swiftroute
+      POSTGRES_PASSWORD: swiftroute
+      POSTGRES_DB: swiftroute
+    ports:
+      - "5432:5432"
+    volumes:
+      - swiftroute_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U swiftroute"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  swiftroute_pgdata:

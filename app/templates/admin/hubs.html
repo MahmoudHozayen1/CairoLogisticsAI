@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Hubs{% endblock %}
+
+{% block content %}
+<h3 class="fw-bold text-primary-dark mb-4"><i class="bi bi-house-gear"></i> Warehouses / Hubs</h3>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Add a hub</h6>
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="mb-2">
+                    {{ form.name.label(class="form-label") }}
+                    {{ form.name(class="form-control form-control-sm") }}
+                    {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                </div>
+                <div class="mb-2">
+                    {{ form.address.label(class="form-label") }}
+                    {{ form.address(class="form-control form-control-sm") }}
+                </div>
+                <label class="form-label">Location <span class="text-muted small">(click the map)</span></label>
+                <div class="row g-2 mb-2">
+                    <div class="col">{{ form.lat(class="form-control form-control-sm", id="lat") }}</div>
+                    <div class="col">{{ form.lon(class="form-control form-control-sm", id="lon") }}</div>
+                </div>
+                <div id="picker" class="map-box mb-3" style="height:240px;"></div>
+                {{ form.submit(class="btn btn-primary w-100") }}
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Existing hubs ({{ hubs|length }})</h6>
+            {% for h in hubs %}
+            <div class="border rounded p-3 mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong>{{ h.name }}</strong>
+                        <span class="badge bg-secondary ms-1">{{ h.courier_count }} couriers</span>
+                        <div class="small text-muted">{{ h.address or '—' }}</div>
+                        <div class="small text-muted">{{ '%.4f'|format(h.lat) }}, {{ '%.4f'|format(h.lon) }}</div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit{{ h.id }}">Edit</button>
+                        <form action="{{ url_for('admin.delete_hub', hub_id=h.id) }}" method="POST" onsubmit="return confirm('Delete this hub?')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="collapse mt-3" id="edit{{ h.id }}">
+                    <form action="{{ url_for('admin.edit_hub', hub_id=h.id) }}" method="POST" class="row g-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-12"><input name="name" value="{{ h.name }}" class="form-control form-control-sm"></div>
+                        <div class="col-12"><input name="address" value="{{ h.address or '' }}" class="form-control form-control-sm"></div>
+                        <div class="col"><input name="lat" value="{{ h.lat }}" class="form-control form-control-sm"></div>
+                        <div class="col"><input name="lon" value="{{ h.lon }}" class="form-control form-control-sm"></div>
+                        <div class="col-12"><button class="btn btn-sm btn-primary">Update</button></div>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted">No hubs yet — add your first one.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const picker = L.map('picker').setView([29.9602, 31.2569], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(picker);
+    let marker;
+    picker.on('click', e => {
+        document.getElementById('lat').value = e.latlng.lat.toFixed(5);
+        document.getElementById('lon').value = e.latlng.lng.toFixed(5);
+        if (marker) picker.removeLayer(marker);
+        marker = L.marker(e.latlng).addTo(picker);
+    });
+    setTimeout(() => picker.invalidateSize(), 200);
+</script>
+{% endblock %}

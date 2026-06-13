@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-speedometer2"></i> Operations Dashboard</h3>
+    <a href="{{ url_for('admin.live_map') }}" class="btn btn-accent"><i class="bi bi-map"></i> Live map &amp; optimise</a>
+</div>
+
+<div class="row g-3 mb-4">
+    {% set cards = [
+        ("Total shipments", totals.shipments, "bi-box-seam", "primary"),
+        ("Delivered", totals.delivered, "bi-check2-circle", "success"),
+        ("In transit", totals.in_transit, "bi-truck", "info"),
+        ("Pending", totals.pending, "bi-hourglass-split", "secondary"),
+        ("Success rate", totals.success_rate ~ '%', "bi-graph-up-arrow", "accent"),
+    ] %}
+    {% for label, value, icon, color in cards %}
+    <div class="col-6 col-lg">
+        <div class="card stat-card card-soft h-100 p-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="text-muted small">{{ label }}</div>
+                    <div class="stat-value text-primary-dark">{{ value }}</div>
+                </div>
+                <div class="stat-icon text-{{ color if color != 'accent' else 'warning' }}"><i class="bi {{ icon }}"></i></div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card card-soft p-4 h-100">
+            <h6 class="fw-bold mb-3">Shipments by status</h6>
+            <canvas id="statusChart" height="220"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card card-soft p-4 h-100">
+            <h6 class="fw-bold mb-3">New shipments (last 7 days)</h6>
+            <canvas id="dailyChart" height="220"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-4">
+        <div class="card card-soft p-4 h-100">
+            <h6 class="fw-bold mb-3">Network</h6>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between px-0"><span>Hubs</span><strong>{{ totals.hubs }}</strong></li>
+                <li class="list-group-item d-flex justify-content-between px-0"><span>Active couriers</span><strong>{{ totals.couriers }}</strong></li>
+                <li class="list-group-item d-flex justify-content-between px-0"><span>Merchants</span><strong>{{ totals.merchants }}</strong></li>
+                <li class="list-group-item d-flex justify-content-between px-0"><span>Failed deliveries</span><strong class="text-danger">{{ totals.failed }}</strong></li>
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card card-soft p-4 h-100">
+            <h6 class="fw-bold mb-3">Recent shipments</h6>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Tracking</th><th>Receiver</th><th>Status</th><th>Created</th></tr></thead>
+                    <tbody>
+                    {% for s in recent %}
+                        <tr>
+                            <td><a class="tracking-code" href="{{ url_for('admin.shipment_detail', shipment_id=s.id) }}">{{ s.tracking_number }}</a></td>
+                            <td>{{ s.receiver_name }}</td>
+                            <td><span class="badge bg-{{ s.status_color }}">{{ s.status_label }}</span></td>
+                            <td class="small text-muted">{{ s.created_at.strftime('%d %b %H:%M') if s.created_at }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="4" class="text-muted">No shipments yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const bsColors = {primary:'#0d6efd',success:'#198754',info:'#0dcaf0',secondary:'#6c757d',danger:'#dc3545',dark:'#212529',warning:'#ffc107'};
+new Chart(document.getElementById('statusChart'), {
+    type: 'doughnut',
+    data: {
+        labels: {{ status_chart.labels|tojson }},
+        datasets: [{ data: {{ status_chart.data|tojson }},
+            backgroundColor: {{ status_chart.colors|tojson }}.map(c => bsColors[c] || '#6c757d') }]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+});
+new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ daily_labels|tojson }},
+        datasets: [{ label: 'Shipments', data: {{ daily_data|tojson }}, backgroundColor: '#1f6fa5', borderRadius: 6 }]
+    },
+    options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

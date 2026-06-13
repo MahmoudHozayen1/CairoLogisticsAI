@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-5"> <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" id="ship-tab" data-bs-toggle="tab" data-bs-target="#ship-pane" type="button">Add Shipment</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="ware-tab" data-bs-toggle="tab" data-bs-target="#ware-pane" type="button">Add Warehouse</button>
+            </li>
+        </ul>
+
+        <div class="tab-content mb-4" id="myTabContent">
+            <div class="tab-pane fade show active" id="ship-pane">
+                <div class="card p-3 shadow-sm border-primary">
+                    <form action="/add_shipment" method="POST">
+                        <h6 class="text-primary border-bottom pb-1">Sender Details</h6>
+                        <div class="row g-2 mb-2">
+                            <div class="col"><input type="text" name="sender_name" class="form-control form-control-sm" placeholder="Sender Name" required></div>
+                            <div class="col"><input type="text" name="sender_phone" class="form-control form-control-sm" placeholder="Phone" required></div>
+                        </div>
+
+                        <h6 class="text-success border-bottom pb-1 mt-2">Receiver Details</h6>
+                        <div class="row g-2 mb-2">
+                            <div class="col"><input type="text" name="receiver_name" class="form-control form-control-sm" placeholder="Receiver Name" required></div>
+                            <div class="col"><input type="text" name="receiver_phone" class="form-control form-control-sm" placeholder="Phone" required></div>
+                        </div>
+                        <input type="text" name="landmark" class="form-control form-control-sm mb-2" placeholder="Landmark (e.g. Near Bank)" required>
+                        
+                        <label class="small text-muted">Location (Click Map)</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col"><input type="text" name="lat" id="s_lat" class="form-control form-control-sm" placeholder="Lat" required></div>
+                            <div class="col"><input type="text" name="lon" id="s_lon" class="form-control form-control-sm" placeholder="Lon" required></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 btn-sm">Create Order</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="ware-pane">
+                <div class="card p-3 shadow-sm border-warning">
+                    <form action="/add_warehouse" method="POST">
+                        <label>Name & Fleet</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-8"><input type="text" name="name" class="form-control form-control-sm" placeholder="Hub Name" required></div>
+                            <div class="col-4"><input type="number" name="couriers" class="form-control form-control-sm" value="2" required></div>
+                        </div>
+                        <label class="small text-muted">Location</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col"><input type="text" name="lat" id="w_lat" class="form-control form-control-sm" placeholder="Lat" required></div>
+                            <div class="col"><input type="text" name="lon" id="w_lon" class="form-control form-control-sm" placeholder="Lon" required></div>
+                        </div>
+                        <button type="submit" class="btn btn-warning w-100 btn-sm">Create Hub</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <h5 class="mb-2">Manage Shipments</h5>
+        <div class="accordion mb-4" id="shipmentAccordion" style="max-height: 400px; overflow-y: auto;">
+            {% for s in shipments %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingS{{ s.id }}">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseS{{ s.id }}">
+                        <div>
+                            <strong>#{{ s.id }}</strong> - {{ s.receiver_name }}
+                            <br><span class="text-muted small" style="font-size: 0.8em;">Fulfilled by: {{ s.fulfilled_by }}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapseS{{ s.id }}" class="accordion-collapse collapse" data-bs-parent="#shipmentAccordion">
+                    <div class="accordion-body bg-light p-2">
+                        <form action="/edit_shipment/{{ s.id }}" method="POST">
+                            <div class="row g-1 mb-1">
+                                <div class="col"><small>Sender</small><input type="text" name="sender_name" value="{{ s.sender_name }}" class="form-control form-control-sm"></div>
+                                <div class="col"><small>Phone</small><input type="text" name="sender_phone" value="{{ s.sender_phone }}" class="form-control form-control-sm"></div>
+                            </div>
+                            <div class="row g-1 mb-1">
+                                <div class="col"><small>Receiver</small><input type="text" name="receiver_name" value="{{ s.receiver_name }}" class="form-control form-control-sm"></div>
+                                <div class="col"><small>Phone</small><input type="text" name="receiver_phone" value="{{ s.receiver_phone }}" class="form-control form-control-sm"></div>
+                            </div>
+                            <small>Landmark</small><input type="text" name="landmark" value="{{ s.landmark }}" class="form-control form-control-sm mb-1">
+                            
+                            <div class="row g-1 mb-2">
+                                <div class="col"><small>Lat</small><input type="text" name="lat" value="{{ s.coords[0] }}" class="form-control form-control-sm"></div>
+                                <div class="col"><small>Lon</small><input type="text" name="lon" value="{{ s.coords[1] }}" class="form-control form-control-sm"></div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between">
+                                <button type="submit" class="btn btn-primary btn-sm py-0">Update</button>
+                                <a href="/delete_shipment/{{ s.id }}" class="btn btn-danger btn-sm py-0" onclick="return confirm('Delete order?')">Delete</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <h5 class="mb-2">Active Hubs</h5>
+        <div class="accordion" id="warehouseAccordion">
+            {% for w in warehouses %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading{{ w.id }}">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ w.id }}">
+                        <strong>{{ w.name }}</strong> &nbsp; <span class="badge bg-secondary">{{ w.couriers }} Drivers</span>
+                    </button>
+                </h2>
+                <div id="collapse{{ w.id }}" class="accordion-collapse collapse" data-bs-parent="#warehouseAccordion">
+                    <div class="accordion-body p-2">
+                        <form action="/edit_warehouse/{{ w.id }}" method="POST">
+                            <input type="text" name="name" value="{{ w.name }}" class="form-control form-control-sm mb-1">
+                            <input type="number" name="couriers" value="{{ w.couriers }}" class="form-control form-control-sm mb-1">
+                            <div class="row g-1 mb-2">
+                                <div class="col"><input type="text" name="lat" value="{{ w.coords[0] }}" class="form-control form-control-sm"></div>
+                                <div class="col"><input type="text" name="lon" value="{{ w.coords[1] }}" class="form-control form-control-sm"></div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <button type="submit" class="btn btn-warning btn-sm py-0">Update</button>
+                                <a href="/delete_warehouse/{{ w.id }}" class="btn btn-danger btn-sm py-0">Delete</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+    </div>
+    
+    <div class="col-md-7">
+        <div class="card shadow-sm mb-3">
+            <div class="card-body p-0">
+                <div id="map" style="height: 600px; width: 100%;"></div>
+            </div>
+        </div>
+        
+        {% for route_name, stops in routes.items() %}
+        <div class="alert alert-info py-2 mb-2 small shadow-sm">
+            <strong><i class="bi bi-truck"></i> {{ route_name }}</strong>
+            <div class="mt-1">
+                {% for stop in stops %}
+                    {% if stop.type == 'start' %}
+                        <span class="badge bg-warning text-dark border">Depot: {{ stop.shipment.customer }}</span>
+                    {% else %}
+                        <span class="badge bg-white text-dark border">#{{ stop.shipment.id }}</span>
+                    {% endif %}
+                    {% if not loop.last %} <i class="bi bi-arrow-right text-muted"></i> {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    var map = L.map('map').setView([29.9602, 31.2569], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    var warehouseIcon = L.icon({iconUrl: 'https://cdn-icons-png.flaticon.com/512/664/664468.png', iconSize: [28, 28]});
+    
+    // Draw Warehouses
+    {% for w in warehouses %}
+        L.marker([{{ w.coords[0] }}, {{ w.coords[1] }}], {icon: warehouseIcon})
+         .addTo(map).bindPopup("<b>{{ w.name }}</b>");
+    {% endfor %}
+
+    // Draw Shipments (Detailed Popup)
+    {% for s in shipments %}
+        L.marker([{{ s.coords[0] }}, {{ s.coords[1] }}])
+         .addTo(map)
+         .bindPopup("<b>Order #{{ s.id }}</b><br>To: {{ s.receiver_name }}<br>Phone: {{ s.receiver_phone }}<br>Landmark: {{ s.landmark }}");
+    {% endfor %}
+
+    // Draw Routes
+    var colors = ['blue', 'red', 'green', 'purple'];
+    var idx = 0;
+    {% for route_name, stops in routes.items() %}
+        var c = colors[idx++ % colors.length];
+        {% for stop in stops %}
+            var path = {{ stop.path_to_next | tojson }};
+            if(path && path.length > 0) L.polyline(path, {color: c, weight: 4, opacity: 0.7}).addTo(map);
+        {% endfor %}
+    {% endfor %}
+
+    // Click to Fill
+    var tempMarker;
+    map.on('click', function(e) {
+        var lat = e.latlng.lat.toFixed(5);
+        var lon = e.latlng.lng.toFixed(5);
+        
+        if(document.getElementById('s_lat')) { document.getElementById('s_lat').value = lat; document.getElementById('s_lon').value = lon; }
+        if(document.getElementById('w_lat')) { document.getElementById('w_lat').value = lat; document.getElementById('w_lon').value = lon; }
+        
+        if(tempMarker) map.removeLayer(tempMarker);
+        tempMarker = L.marker([lat, lon], {opacity: 0.5}).addTo(map);
+    });
+</script>
+{% endblock %}

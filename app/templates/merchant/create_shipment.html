@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}New Shipment{% endblock %}
+
+{% block content %}
+<h3 class="fw-bold text-primary-dark mb-4"><i class="bi bi-plus-circle"></i> Create Shipment</h3>
+
+<form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card card-soft p-4 mb-4">
+                <h6 class="fw-bold mb-3">Receiver</h6>
+                <div class="mb-2">{{ form.receiver_name.label(class="form-label") }}{{ form.receiver_name(class="form-control") }}
+                    {% for e in form.receiver_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                <div class="mb-2">{{ form.receiver_phone.label(class="form-label") }}{{ form.receiver_phone(class="form-control") }}
+                    {% for e in form.receiver_phone.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                <div class="row g-2">
+                    <div class="col">{{ form.district.label(class="form-label") }}{{ form.district(class="form-control") }}</div>
+                    <div class="col">{{ form.landmark.label(class="form-label") }}{{ form.landmark(class="form-control") }}</div>
+                </div>
+                <div class="mt-2">{{ form.address.label(class="form-label") }}{{ form.address(class="form-control") }}</div>
+            </div>
+
+            <div class="card card-soft p-4">
+                <h6 class="fw-bold mb-3">Parcel</h6>
+                <div class="mb-2">{{ form.package_description.label(class="form-label") }}{{ form.package_description(class="form-control") }}</div>
+                <div class="row g-2">
+                    <div class="col">{{ form.weight_kg.label(class="form-label") }}{{ form.weight_kg(class="form-control") }}</div>
+                    <div class="col">{{ form.cod_amount.label(class="form-label") }}{{ form.cod_amount(class="form-control") }}</div>
+                </div>
+                <div class="mt-2">{{ form.hub_id.label(class="form-label") }}{{ form.hub_id(class="form-select") }}</div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card card-soft p-4">
+                <h6 class="fw-bold mb-2">Delivery location</h6>
+                <p class="small text-muted">Click the map to drop a pin on the delivery address.</p>
+                <div class="row g-2 mb-2">
+                    <div class="col">{{ form.lat.label(class="form-label") }}{{ form.lat(class="form-control", id="lat") }}
+                        {% for e in form.lat.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                    <div class="col">{{ form.lon.label(class="form-label") }}{{ form.lon(class="form-control", id="lon") }}
+                        {% for e in form.lon.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                </div>
+                <div id="picker" class="map-box" style="height:380px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 d-flex gap-2">
+        {{ form.submit(class="btn btn-primary btn-lg") }}
+        <a href="{{ url_for('merchant.dashboard') }}" class="btn btn-outline-secondary btn-lg">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const picker = L.map('picker').setView([29.9602, 31.2569], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(picker);
+    let marker;
+    function place(lat, lng) {
+        document.getElementById('lat').value = (+lat).toFixed(5);
+        document.getElementById('lon').value = (+lng).toFixed(5);
+        if (marker) picker.removeLayer(marker);
+        marker = L.marker([lat, lng]).addTo(picker);
+    }
+    picker.on('click', e => place(e.latlng.lat, e.latlng.lng));
+    setTimeout(() => picker.invalidateSize(), 200);
+</script>
+{% endblock %}

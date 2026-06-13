@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ s.tracking_number }}{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('admin.shipments') }}" class="text-muted small"><i class="bi bi-arrow-left"></i> Back to shipments</a>
+
+<div class="d-flex justify-content-between align-items-center my-3 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0 tracking-code">{{ s.tracking_number }}</h3>
+    <span class="badge bg-{{ s.status_color }} fs-6">{{ s.status_label }}</span>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card card-soft p-4 mb-4">
+            <div class="row">
+                <div class="col-md-6 border-end">
+                    <h6 class="text-muted text-uppercase small">Sender</h6>
+                    <div class="fw-bold">{{ s.sender_name }}</div>
+                    <div class="small text-muted">{{ s.sender_phone or '—' }}</div>
+                    <div class="small text-muted mt-1">Merchant: {{ s.merchant.display_name if s.merchant else '—' }}</div>
+                </div>
+                <div class="col-md-6 ps-md-4">
+                    <h6 class="text-muted text-uppercase small">Receiver</h6>
+                    <div class="fw-bold">{{ s.receiver_name }}</div>
+                    <div class="small text-muted">{{ s.receiver_phone }}</div>
+                    <div class="small mt-1"><i class="bi bi-geo-alt text-danger"></i> {{ s.district or s.address or 'Custom location' }}</div>
+                    {% if s.landmark %}<div class="small text-muted"><em>"{{ s.landmark }}"</em></div>{% endif %}
+                </div>
+            </div>
+            <hr>
+            <div class="row text-center">
+                <div class="col"><div class="small text-muted">Package</div><strong>{{ s.package_description or '—' }}</strong></div>
+                <div class="col"><div class="small text-muted">Weight</div><strong>{{ s.weight_kg }} kg</strong></div>
+                <div class="col"><div class="small text-muted">COD</div><strong>{{ '%.0f'|format(s.cod_amount or 0) }} EGP</strong></div>
+                <div class="col"><div class="small text-muted">Hub</div><strong>{{ s.hub.name if s.hub else '—' }}</strong></div>
+            </div>
+        </div>
+
+        <div class="card card-soft p-0 mb-4">
+            <div id="map" class="map-box"></div>
+        </div>
+
+        {% if s.proof_image %}
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-2">Proof of delivery</h6>
+            <img src="{{ url_for('static', filename='uploads/' ~ s.proof_image) }}" class="img-fluid rounded" alt="Proof of delivery">
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="fw-bold mb-3">Update status</h6>
+            <form action="{{ url_for('admin.update_status', shipment_id=s.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="status" class="form-select form-select-sm mb-2">
+                    {% for key, label in ShipmentStatus.LABELS.items() %}
+                    <option value="{{ key }}" {{ 'selected' if s.status == key }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <input name="note" class="form-control form-control-sm mb-2" placeholder="Note (optional)">
+                <button class="btn btn-primary btn-sm w-100">Save status</button>
+            </form>
+            <hr>
+            <h6 class="fw-bold mb-2">Assign courier</h6>
+            <form action="{{ url_for('admin.assign_courier', shipment_id=s.id) }}" method="POST" class="d-flex gap-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="courier_id" class="form-select form-select-sm">
+                    {% for c in couriers %}
+                    <option value="{{ c.id }}" {{ 'selected' if s.courier_id == c.id }}>{{ c.name }} ({{ c.hub.name if c.hub }})</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-outline-primary btn-sm">Assign</button>
+            </form>
+        </div>
+
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Tracking timeline</h6>
+            {% set shipment = s %}
+            {% include "partials/_timeline.html" with context %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([{{ s.lat }}, {{ s.lon }}], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.marker([{{ s.lat }}, {{ s.lon }}]).addTo(map).bindPopup("{{ s.receiver_name }}").openPopup();
+    setTimeout(() => map.invalidateSize(), 200);
+</script>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}My Shipments{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-box-seam"></i> My Shipments</h3>
+    <a href="{{ url_for('merchant.create_shipment') }}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> New shipment</a>
+</div>
+
+<div class="card card-soft p-3">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Tracking</th><th>Receiver</th><th>District</th><th>Status</th><th>COD</th><th>Created</th></tr></thead>
+            <tbody>
+            {% for s in shipments %}
+                <tr style="cursor:pointer" onclick="location.href='{{ url_for('merchant.shipment_detail', shipment_id=s.id) }}'">
+                    <td class="tracking-code">{{ s.tracking_number }}</td>
+                    <td>{{ s.receiver_name }}</td>
+                    <td>{{ s.district or '—' }}</td>
+                    <td><span class="badge bg-{{ s.status_color }}">{{ s.status_label }}</span></td>
+                    <td>{{ '%.0f'|format(s.cod_amount or 0) }} EGP</td>
+                    <td class="small text-muted">{{ s.created_at.strftime('%d %b %H:%M') if s.created_at }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="text-muted">No shipments yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if pagination.pages > 1 %}
+<nav class="mt-3"><ul class="pagination justify-content-center">
+    {% for p in pagination.iter_pages() %}
+        {% if p %}<li class="page-item {{ 'active' if p == pagination.page }}"><a class="page-link" href="{{ url_for('merchant.shipments', page=p) }}">{{ p }}</a></li>
+        {% else %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+    {% endfor %}
+</ul></nav>
+{% endif %}
+{% endblock %}

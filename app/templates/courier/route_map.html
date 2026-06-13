@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}My Route{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-map"></i> My Route</h3>
+    <a href="{{ url_for('courier.dashboard') }}" class="btn btn-outline-secondary btn-sm">Back to list</a>
+</div>
+
+<div class="card card-soft mb-3"><div id="map" class="map-box map-tall"></div></div>
+
+<div class="card card-soft p-3">
+    <ol class="mb-0">
+        {% for st in stops %}
+        <li class="mb-1">
+            <span class="tracking-code">{{ st.tracking_number }}</span> — {{ st.receiver }}
+            {% if st.eta %}<span class="text-muted small">· ETA ~{{ st.eta }} min</span>{% endif %}
+        </li>
+        {% else %}
+        <li class="text-muted">No optimised stops yet.</li>
+        {% endfor %}
+    </ol>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([{{ hub.lat if hub else 29.9602 }}, {{ hub.lon if hub else 31.2569 }}], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const bounds = [];
+
+    {% if hub %}
+    const hubIcon = L.divIcon({ html: '<i class="bi bi-house-fill" style="font-size:22px;color:#0d3b66"></i>', className:'', iconSize:[22,22] });
+    L.marker([{{ hub.lat }}, {{ hub.lon }}], { icon: hubIcon }).addTo(map).bindPopup("{{ hub.name }}");
+    bounds.push([{{ hub.lat }}, {{ hub.lon }}]);
+    {% endif %}
+
+    {% for st in stops %}
+        const path{{ loop.index }} = {{ st.path|tojson }};
+        if (path{{ loop.index }} && path{{ loop.index }}.length > 1) L.polyline(path{{ loop.index }}, { color:'#0d6efd', weight:4, opacity:.75 }).addTo(map);
+        L.marker([{{ st.coords[0] }}, {{ st.coords[1] }}]).addTo(map)
+            .bindTooltip("{{ st.sequence }}. {{ st.receiver }}", { permanent:false });
+        bounds.push([{{ st.coords[0] }}, {{ st.coords[1] }}]);
+    {% endfor %}
+
+    if (bounds.length) map.fitBounds(bounds, { padding:[40,40] });
+</script>
+{% endblock %}

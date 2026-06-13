@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-lg-7 col-md-9">
+        
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-4 text-center">
+                <h3 class="fw-bold text-primary mb-3"><i class="bi bi-truck"></i> Track Your Shipment</h3>
+                <form method="POST" class="d-flex justify-content-center">
+                    <div class="input-group" style="max-width: 400px;">
+                        <input type="number" name="order_id" class="form-control form-control-lg" placeholder="Enter Tracking ID (e.g. 101)" required>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">TRACK</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if info %}
+        <div class="card shadow-lg border-0 overflow-hidden">
+            <div class="card-header py-4 text-center text-white {% if info.status == 'Out for Delivery' %}bg-success{% else %}bg-secondary{% endif %}">
+                <h5 class="text-uppercase letter-spacing-2 mb-1 opacity-75">Estimated Delivery Time</h5>
+                <h1 class="display-3 fw-bold mb-2">{{ info.eta }}</h1>
+                <span class="badge bg-white text-dark px-3 py-2 rounded-pill text-uppercase fw-bold">{{ info.status }}</span>
+            </div>
+
+            <div class="card-body p-5">
+                
+                <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                    <div>
+                        <small class="text-muted d-block fw-bold small">TRACKING ID</small>
+                        <span class="h4">#{{ info.id }}</span>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted d-block fw-bold small">FULFILLED BY</small>
+                        <span class="h5 text-primary"><i class="bi bi-box-seam"></i> {{ info.fulfilled_by }}</span>
+                    </div>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-md-6 border-end">
+                        <h6 class="text-uppercase text-muted fw-bold small mb-3">Sender Details</h6>
+                        <div class="mb-3">
+                            <label class="small text-muted">Name</label>
+                            <div class="fw-bold">{{ info.sender_name }}</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small text-muted">Phone Number</label>
+                            <div>{{ info.sender_phone }}</div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 ps-md-4">
+                        <h6 class="text-uppercase text-muted fw-bold small mb-3">Receiver Details</h6>
+                        <div class="mb-3">
+                            <label class="small text-muted">Name</label>
+                            <div class="fw-bold">{{ info.receiver_name }}</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small text-muted">Phone Number</label>
+                            <div>{{ info.receiver_phone }}</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="small text-muted">Delivery Address</label>
+                            <div>
+                                <i class="bi bi-geo-alt-fill text-danger"></i> {{ info.district }}
+                            </div>
+                            <div class="text-muted small mt-1">
+                                <em>"{{ info.landmark }}"</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="card-footer bg-light text-center py-3 small text-muted">
+                Thank you for using CairoLogistics AI.
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="text-center mt-4">
+            <a href="/" class="text-decoration-none text-muted">← Back to Home</a>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .letter-spacing-2 { letter-spacing: 2px; font-size: 0.8em; }
+    .border-end { border-right: 1px solid #eee; }
+    @media (max-width: 768px) { .border-end { border-right: none; border-bottom: 1px solid #eee; padding-bottom: 1rem; } }
+</style>
+{% endblock %}

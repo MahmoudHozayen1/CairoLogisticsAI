@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Merchant Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-shop"></i> {{ current_user.display_name }}</h3>
+    <a href="{{ url_for('merchant.create_shipment') }}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> New shipment</a>
+</div>
+
+<div class="row g-3 mb-4">
+    {% set cards = [
+        ("Total", stats.total, "bi-box-seam", "primary"),
+        ("Delivered", stats.delivered, "bi-check2-circle", "success"),
+        ("In transit", stats.in_transit, "bi-truck", "info"),
+        ("Pending", stats.pending, "bi-hourglass-split", "secondary"),
+    ] %}
+    {% for label, value, icon, color in cards %}
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3">
+            <div class="d-flex justify-content-between">
+                <div><div class="text-muted small">{{ label }}</div><div class="stat-value text-primary-dark">{{ value }}</div></div>
+                <div class="stat-icon text-{{ color }}"><i class="bi {{ icon }}"></i></div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card card-soft p-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0">Recent shipments</h6>
+        <a href="{{ url_for('merchant.shipments') }}" class="small">View all</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Tracking</th><th>Receiver</th><th>Status</th><th>COD</th><th>Created</th></tr></thead>
+            <tbody>
+            {% for s in recent %}
+                <tr style="cursor:pointer" onclick="location.href='{{ url_for('merchant.shipment_detail', shipment_id=s.id) }}'">
+                    <td class="tracking-code">{{ s.tracking_number }}</td>
+                    <td>{{ s.receiver_name }}</td>
+                    <td><span class="badge bg-{{ s.status_color }}">{{ s.status_label }}</span></td>
+                    <td>{{ '%.0f'|format(s.cod_amount or 0) }} EGP</td>
+                    <td class="small text-muted">{{ s.created_at.strftime('%d %b %H:%M') if s.created_at }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5" class="text-muted">No shipments yet. <a href="{{ url_for('merchant.create_shipment') }}">Create your first one.</a></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

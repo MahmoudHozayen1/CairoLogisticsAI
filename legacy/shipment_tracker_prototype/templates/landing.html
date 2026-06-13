@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row min-vh-75 align-items-center justify-content-center text-center mt-5">
+    <div class="col-lg-8">
+        <h1 class="display-4 fw-bold mb-4">Welcome to CairoLogistics AI</h1>
+        <p class="lead text-muted mb-5">
+            Optimize shipments, track deliveries, and manage your logistics fleet with the power of GIS and AI.
+        </p>
+        
+        <div class="row g-4 justify-content-center">
+            <div class="col-md-5">
+                <div class="card h-100 shadow-sm border-0 hover-effect">
+                    <div class="card-body p-5">
+                        <div class="display-1 text-primary mb-3">
+                            <i class="bi bi-person-workspace"></i>
+                        </div>
+                        <h3 class="card-title">Admin Dashboard</h3>
+                        <p class="card-text text-muted">
+                            Manage warehouses, optimize routes, and view fleet analytics.
+                        </p>
+                        <a href="/admin" class="btn btn-primary btn-lg w-100 stretched-link">
+                            Go to Admin
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-5">
+                <div class="card h-100 shadow-sm border-0 hover-effect">
+                    <div class="card-body p-5">
+                        <div class="display-1 text-success mb-3">
+                            <i class="bi bi-box-seam"></i>
+                        </div>
+                        <h3 class="card-title">Customer Tracking</h3>
+                        <p class="card-text text-muted">
+                            Track your package in real-time and check estimated delivery.
+                        </p>
+                        <a href="/track" class="btn btn-success btn-lg w-100 stretched-link">
+                            Track Order
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Small hover animation to make it look modern */
+    .hover-effect {
+        transition: transform 0.3s ease;
+    }
+    .hover-effect:hover {
+        transform: translateY(-10px);
+    }
+</style>
+{% endblock %}

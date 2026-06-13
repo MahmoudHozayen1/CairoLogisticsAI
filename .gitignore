@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment & secrets
+.env
+
+# Database / instance
+instance/
+*.db
+*.sqlite3
+
+# Uploads (proof-of-delivery images)
+app/static/uploads/
+
+# OSMnx / routing cache
+cache/
+shipment_tracker/cache/
+
+# Migrations versions are kept, but local alembic temp files are not
+*.bak
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test / build caches
+.pytest_cache/
+
+# Personal / non-code documents (not published)
+*.pdf
+*.docx

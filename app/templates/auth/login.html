@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card card-soft p-4 mt-4">
+            <h3 class="fw-bold mb-1 text-primary-dark"><i class="bi bi-box-arrow-in-right"></i> Sign in</h3>
+            <p class="text-muted small mb-4">Access your {{ app_name }} dashboard.</p>
+
+            <form method="POST" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ form.email.label(class="form-label") }}
+                    {{ form.email(class="form-control", placeholder="you@example.com") }}
+                    {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                </div>
+                <div class="mb-3">
+                    {{ form.password.label(class="form-label") }}
+                    {{ form.password(class="form-control", placeholder="••••••••") }}
+                    {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                </div>
+                <div class="form-check mb-3">
+                    {{ form.remember(class="form-check-input") }}
+                    {{ form.remember.label(class="form-check-label") }}
+                </div>
+                {{ form.submit(class="btn btn-primary w-100") }}
+            </form>
+
+            <hr class="my-4">
+            <p class="text-center small text-muted mb-2">New merchant?
+                <a href="{{ url_for('auth.register') }}">Create an account</a>
+            </p>
+            <div class="bg-light rounded p-3 small">
+                <strong>Demo accounts</strong> (after <code>flask --app run seed</code>):
+                <ul class="mb-0 mt-1">
+                    <li>Admin — <code>admin@swiftroute.test</code> / <code>admin12345</code></li>
+                    <li>Courier — <code>courier1@swiftroute.test</code> / <code>courier123</code></li>
+                    <li>Merchant — <code>merchant1@swiftroute.test</code> / <code>merchant123</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

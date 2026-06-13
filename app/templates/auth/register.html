@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Create account{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-6">
+        <div class="card card-soft p-4 mt-4">
+            <h3 class="fw-bold mb-1 text-primary-dark"><i class="bi bi-shop"></i> Merchant sign up</h3>
+            <p class="text-muted small mb-4">Start creating and tracking shipments in minutes.</p>
+
+            <form method="POST" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control") }}
+                        {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.business_name.label(class="form-label") }}
+                        {{ form.business_name(class="form-control", placeholder="Optional") }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control") }}
+                        {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.phone.label(class="form-label") }}
+                        {{ form.phone(class="form-control") }}
+                        {% for e in form.phone.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.password.label(class="form-label") }}
+                        {{ form.password(class="form-control") }}
+                        {% for e in form.password.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.confirm.label(class="form-label") }}
+                        {{ form.confirm(class="form-control") }}
+                        {% for e in form.confirm.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </div>
+                </div>
+                <div class="mt-4">{{ form.submit(class="btn btn-primary w-100") }}</div>
+            </form>
+            <p class="text-center small text-muted mt-3 mb-0">
+                Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

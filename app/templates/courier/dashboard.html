@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}My Deliveries{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-truck"></i> My Deliveries</h3>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('courier.route_map') }}" class="btn btn-accent"><i class="bi bi-map"></i> View route</a>
+        <form action="{{ url_for('courier.toggle_availability') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-secondary">
+                {{ 'Go off duty' if current_user.is_available else 'Go available' }}
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    {% set cards = [
+        ("Active stops", stats.active, "bi-geo-alt", "primary"),
+        ("Delivered (all-time)", stats.delivered_total, "bi-check2-circle", "success"),
+        ("COD to collect", stats.cod_to_collect ~ ' EGP', "bi-cash-coin", "warning"),
+    ] %}
+    {% for label, value, icon, color in cards %}
+    <div class="col-md-4">
+        <div class="card stat-card card-soft p-3">
+            <div class="d-flex justify-content-between">
+                <div><div class="text-muted small">{{ label }}</div><div class="stat-value text-primary-dark">{{ value }}</div></div>
+                <div class="stat-icon text-{{ color }}"><i class="bi {{ icon }}"></i></div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card card-soft p-3">
+    <h6 class="fw-bold mb-3">Stops in order</h6>
+    {% for s in shipments %}
+    <div class="border rounded p-3 mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <span class="badge bg-primary rounded-circle">{{ s.route_sequence or '•' }}</span>
+            <strong class="ms-2 tracking-code">{{ s.tracking_number }}</strong>
+            <span class="badge bg-{{ s.status_color }} ms-1">{{ s.status_label }}</span>
+            <div class="small text-muted mt-1">
+                <i class="bi bi-person"></i> {{ s.receiver_name }} · {{ s.receiver_phone }}
+                · <i class="bi bi-geo-alt"></i> {{ s.district or s.address or 'Custom' }}
+                {% if s.cod_amount %}· <span class="text-warning fw-bold">COD {{ '%.0f'|format(s.cod_amount) }} EGP</span>{% endif %}
+            </div>
+        </div>
+        <a href="{{ url_for('courier.shipment_detail', shipment_id=s.id) }}" class="btn btn-sm btn-primary">Open</a>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No active deliveries. Enjoy the break! ☕</p>
+    {% endfor %}
+</div>
+{% endblock %}

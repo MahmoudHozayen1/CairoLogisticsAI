@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Live Map{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-map"></i> Live Map &amp; Route Optimisation</h3>
+    <form action="{{ url_for('admin.optimize') }}" method="POST" class="d-flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-accent">
+            <i class="bi bi-stars"></i> Optimise all hubs
+        </button>
+    </form>
+</div>
+
+<div class="alert alert-info small">
+    The optimiser clusters every <strong>At-Warehouse</strong> parcel per available courier (k-means),
+    sequences each route with a nearest-neighbour + 2-opt heuristic, and draws it below.
+</div>
+
+<div class="card card-soft mb-3">
+    <div id="map" class="map-box map-tall"></div>
+</div>
+
+<div class="row g-3">
+    {% for cid, stops in routes.items() %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card card-soft p-3 h-100">
+            <h6 class="fw-bold mb-2"><i class="bi bi-truck"></i> {{ courier_names.get(cid, 'Courier ' ~ cid) }}</h6>
+            <ol class="small mb-0 ps-3">
+                {% for st in stops %}
+                <li>{{ st.tracking_number }} — {{ st.receiver }}</li>
+                {% endfor %}
+            </ol>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12"><div class="alert alert-light border">No optimised routes yet. Click <strong>Optimise all hubs</strong>.</div></div>
+    {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const map = L.map('map').setView([29.9602, 31.2569], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+    const hubIcon = L.divIcon({ html: '<i class="bi bi-house-fill" style="font-size:22px;color:#0d3b66"></i>', className: '', iconSize: [22,22] });
+    const bounds = [];
+
+    {% for h in hubs %}
+        L.marker([{{ h.lat }}, {{ h.lon }}], { icon: hubIcon }).addTo(map).bindPopup("<b>{{ h.name }}</b><br>{{ h.address or '' }}");
+        bounds.push([{{ h.lat }}, {{ h.lon }}]);
+    {% endfor %}
+
+    {% for s in shipments %}
+        L.marker([{{ s.lat }}, {{ s.lon }}]).addTo(map)
+         .bindPopup("<b>{{ s.tracking_number }}</b><br>{{ s.receiver_name }}<br><span class='badge bg-{{ s.status_color }}'>{{ s.status_label }}</span>");
+        bounds.push([{{ s.lat }}, {{ s.lon }}]);
+    {% endfor %}
+
+    const colors = ['#0d6efd','#dc3545','#198754','#6f42c1','#fd7e14','#20c997'];
+    let ci = 0;
+    {% for cid, stops in routes.items() %}
+        (function() {
+            const color = colors[ci++ % colors.length];
+            {% for st in stops %}
+                const path = {{ st.path|tojson }};
+                if (path && path.length > 1) {
+                    L.polyline(path, { color: color, weight: 4, opacity: .75 }).addTo(map);
+                }
+                L.circleMarker([{{ st.coords[0] }}, {{ st.coords[1] }}], { radius: 9, color: color, fillColor: color, fillOpacity: .9 })
+                 .addTo(map).bindTooltip("{{ st.sequence }}", { permanent: true, direction: 'center', className: 'seq-label' });
+            {% endfor %}
+        })();
+    {% endfor %}
+
+    if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+</script>
+<style>.seq-label { background: transparent; border: none; box-shadow: none; color: #fff; font-weight: 700; font-size: 11px; }</style>
+{% endblock %}

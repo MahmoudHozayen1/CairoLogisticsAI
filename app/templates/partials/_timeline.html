@@ -1,0 +1,16 @@
+{# Reusable shipment timeline. Expects `shipment` in context. #}
+<ul class="timeline">
+    {% for e in shipment.events|reverse %}
+    <li>
+        <div class="d-flex justify-content-between">
+            <span class="badge bg-{{ e.status_color }}">{{ e.status_label }}</span>
+            <small class="text-muted">{{ e.created_at.strftime('%d %b %Y, %H:%M') if e.created_at }}</small>
+        </div>
+        {% if e.note %}<div class="small mt-1">{{ e.note }}</div>{% endif %}
+        {% if e.location %}<div class="small text-muted"><i class="bi bi-geo-alt"></i> {{ e.location }}</div>{% endif %}
+        <div class="small text-muted">by {{ e.created_by }}</div>
+    </li>
+    {% else %}
+    <li><span class="text-muted">No events yet.</span></li>
+    {% endfor %}
+</ul>

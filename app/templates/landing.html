@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Smart Logistics &amp; Parcel Delivery{% endblock %}
+
+{% block content %}
+<section class="sr-hero p-5 mb-5">
+    <div class="row align-items-center g-4">
+        <div class="col-lg-7">
+            <h1 class="display-5 fw-bold mb-3">Deliveries, optimised by AI.</h1>
+            <p class="lead mb-4 opacity-90">
+                {{ app_name }} is an end-to-end logistics platform for merchants, couriers and
+                operations teams — real-time tracking, automatic route optimisation and
+                cash-on-delivery, all in one place.
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ url_for('auth.register') }}" class="btn btn-accent btn-lg">
+                    <i class="bi bi-shop"></i> Sell &amp; ship
+                </a>
+                <a href="{{ url_for('tracking.track') }}" class="btn btn-light btn-lg">
+                    <i class="bi bi-search"></i> Track a parcel
+                </a>
+            </div>
+        </div>
+        <div class="col-lg-5 text-center d-none d-lg-block">
+            <i class="bi bi-truck" style="font-size: 11rem; opacity:.85;"></i>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4 mb-5">
+    {% set features = [
+        ("bi-geo-alt", "Live tracking", "Customers follow every milestone from pickup to doorstep with a simple tracking number."),
+        ("bi-diagram-3", "AI route optimisation", "Shipments are clustered per courier and sequenced with a TSP heuristic to cut distance and time."),
+        ("bi-cash-coin", "Cash on delivery", "Collect COD amounts and reconcile them per courier, just like Bosta."),
+        ("bi-people", "Multi-role portals", "Dedicated dashboards for admins, couriers and merchants with the right permissions."),
+    ] %}
+    {% for icon, title, desc in features %}
+    <div class="col-md-6 col-lg-3">
+        <div class="card card-soft h-100 p-4 hover-lift text-center">
+            <div class="text-primary-dark mb-2"><i class="bi {{ icon }}" style="font-size:2.2rem;"></i></div>
+            <h5 class="fw-bold">{{ title }}</h5>
+            <p class="text-muted small mb-0">{{ desc }}</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row g-4 align-items-stretch">
+    <div class="col-lg-4">
+        <div class="card card-soft h-100 p-4 text-center hover-lift">
+            <div class="display-6 text-primary-dark mb-2"><i class="bi bi-shop-window"></i></div>
+            <h4>Merchants</h4>
+            <p class="text-muted">Create shipments, drop a pin on the map and watch them move in real time.</p>
+            <a href="{{ url_for('auth.register') }}" class="btn btn-primary mt-auto">Create account</a>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card card-soft h-100 p-4 text-center hover-lift">
+            <div class="display-6 text-primary-dark mb-2"><i class="bi bi-person-badge"></i></div>
+            <h4>Couriers</h4>
+            <p class="text-muted">See your optimised route, update statuses and capture proof of delivery.</p>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-outline-primary mt-auto">Courier sign in</a>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card card-soft h-100 p-4 text-center hover-lift">
+            <div class="display-6 text-primary-dark mb-2"><i class="bi bi-speedometer2"></i></div>
+            <h4>Operations</h4>
+            <p class="text-muted">Manage hubs &amp; fleets, run the optimiser and monitor network KPIs.</p>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-outline-primary mt-auto">Admin sign in</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
