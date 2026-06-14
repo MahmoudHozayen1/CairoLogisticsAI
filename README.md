@@ -17,9 +17,11 @@
 |------|--------------|
 | **Multi-role auth** | Admin, Courier and Merchant portals with role-based access control. |
 | **Merchant portal** | Create shipments by dropping a pin on a map, set COD, track every parcel. |
-| **AI route optimisation** | k-means clustering per courier + nearest-neighbour & 2-opt TSP sequencing. Optional OSMnx street-level routing. |
+| **AI route optimisation** | k-means clustering per courier + nearest-neighbour & 2-opt TSP sequencing. |
+| **Street-following routes** | Real road geometry via OSRM (cached, with offline fallback). |
+| **Live traffic & closures** | Routes coloured by simulated, time-of-day congestion; admins mark road closures that the optimiser re-routes around. |
 | **Courier portal** | Optimised stop list, live route map, one-tap *Delivered/Failed*, photo proof of delivery. |
-| **Admin operations** | Manage hubs & fleet, run the optimiser, KPI dashboard with charts, full shipment table. |
+| **Admin operations** | Manage hubs & fleet (create/edit), run the optimiser, KPI dashboard with charts, full shipment table. |
 | **Public tracking** | No-login tracking by number with a Bosta-style status timeline + ETA. |
 | **REST API** | JSON endpoints for tracking, shipments and KPIs. |
 | **Cash on delivery** | Per-parcel COD amounts, surfaced to couriers and reconciled per route. |
@@ -36,9 +38,13 @@
 | --- | --- |
 | [![Admin dashboard](docs/screenshots/03-admin-dashboard.png)](docs/screenshots/03-admin-dashboard.png) | [![Live map](docs/screenshots/04-admin-live-map.png)](docs/screenshots/04-admin-live-map.png) |
 
-| Merchant — create shipment (pin on map) | Courier — my deliveries |
+| Traffic colours &amp; road closures | Merchant — create shipment (pin on map) |
 | --- | --- |
-| [![Create shipment](docs/screenshots/05-merchant-create.png)](docs/screenshots/05-merchant-create.png) | [![Courier deliveries](docs/screenshots/06-courier-dashboard.png)](docs/screenshots/06-courier-dashboard.png) |
+| [![Traffic and closures](docs/screenshots/07-admin-closures.png)](docs/screenshots/07-admin-closures.png) | [![Create shipment](docs/screenshots/05-merchant-create.png)](docs/screenshots/05-merchant-create.png) |
+
+| Courier — my deliveries | Courier — street route with live traffic |
+| --- | --- |
+| [![Courier deliveries](docs/screenshots/06-courier-dashboard.png)](docs/screenshots/06-courier-dashboard.png) | [![Courier route traffic](docs/screenshots/09-courier-route-traffic.png)](docs/screenshots/09-courier-route-traffic.png) |
 
 > Regenerate these anytime by running the app, then
 > [`scripts/capture_screenshots.py`](scripts/capture_screenshots.py) (headless Playwright;
@@ -54,10 +60,12 @@ config.py                 → environment-driven config (SQLite default, Postgre
 app/
 ├── __init__.py           → application factory, blueprints, CLI commands
 ├── extensions.py         → db, login, migrate, csrf
-├── models.py             → User, Hub, Shipment, ShipmentEvent, RouteStop
+├── models.py             → User, Hub, Shipment, ShipmentEvent, RouteStop, RoadClosure
 ├── forms.py              → WTForms (validation + CSRF)
 ├── utils.py              → role decorators, tracking numbers, uploads
-├── routing/optimizer.py  → the AI route-optimisation engine
+├── routing/
+│   ├── optimizer.py      → clustering + TSP sequencing (the AI optimiser)
+│   └── street_router.py  → OSRM street geometry, traffic model, closure avoidance
 ├── blueprints/           → main, auth, admin, courier, merchant, tracking, api
 ├── templates/            → Jinja2 + Bootstrap 5 + Leaflet
 └── static/               → CSS + proof-of-delivery uploads
@@ -158,10 +166,19 @@ For each hub the engine:
 
 1. **Clusters** at-warehouse parcels into one group per available courier (*k-means*).
 2. **Sequences** each courier's stops with **nearest-neighbour + 2-opt** (a TSP heuristic).
-3. **Draws** the route — straight lines by default, or real road geometry when
-   `ENABLE_STREET_ROUTING=1` (uses OSMnx + a cached street graph; see optional deps in
-   `requirements.txt`).
-4. **Estimates** an ETA per stop from distance and average courier speed.
+3. **Draws** the route along **real streets** using OSRM (`ROUTING_PROVIDER=osrm`, the default;
+   results are cached on disk). It falls back to straight lines if offline, and an optional
+   local OSMnx graph is also supported.
+4. **Avoids road closures** — admins mark closed roads on the *Traffic* page; the optimiser
+   re-routes the drawn geometry around active closures and flags any leg it can't clear.
+5. **Estimates** an ETA per stop from street distance and average courier speed.
+
+### Traffic colours
+
+Every route is split into segments coloured by congestion — **green** (clear) → **amber** →
+**orange** → **red** (heavy/blocked). Congestion is a deterministic, **time-of-day** simulation
+(there is no live traffic feed) that peaks during the morning and evening rush hours, so the same
+road looks calmer at night. Closures are drawn as red zones and their affected legs become dashed red.
 
 Heavy scientific libraries are optional — the optimiser ships pure-Python fallbacks for distance,
 clustering and routing, so it never fails to run.

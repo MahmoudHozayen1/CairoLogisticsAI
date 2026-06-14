@@ -70,7 +70,9 @@ Sign in with a courier account (created by an admin or seeded).
 - Toggle **availability** (off duty removes you from the optimiser).
 
 ### My route (`/courier/route`)
-A map of your hub and all your stops with the drawn route and ETAs.
+A map of your hub and all your stops with the drawn street route and ETAs. The route is **coloured
+by live traffic** and shows any **road closure** on your way as a red zone with a dashed-red
+detour, plus a warning banner.
 
 ### Delivering (`/courier/shipment/<id>`)
 - Tap **call** to phone the recipient or **Open directions** for turn-by-turn navigation.
@@ -90,8 +92,11 @@ Sign in with the admin account.
 
 ### Live map & optimisation (`/admin/map`)
 - See every hub and active parcel on one map.
-- **Optimise all hubs** clusters at-warehouse parcels per courier and draws each route in its own
-  colour, with numbered stops.
+- **Optimise all hubs** clusters at-warehouse parcels per courier and draws each route along real
+  streets, with numbered stops.
+- Route lines are **coloured by traffic** (green = clear → red = heavy). A **legend** explains the
+  colours. Active **road closures** appear as red zones, and any route leg passing through one is
+  drawn as a dashed red line with a warning banner.
 
 ### Shipments (`/admin/shipments`)
 Filter by status, page through all parcels, and open any one to:
@@ -104,7 +109,13 @@ Add warehouses by clicking the map; edit or delete existing ones. A hub with par
 can't be deleted (data-integrity guard).
 
 ### Couriers (`/admin/couriers`)
-Create couriers (name, email, hub, vehicle, password) and **activate/deactivate** them.
+Create couriers (name, email, hub, vehicle, password), **edit** any courier inline (click **Edit** to
+change name, email, phone, hub, vehicle, or reset the password), and **activate/deactivate** them.
+
+### Traffic & road closures (`/admin/closures`)
+- Add a **closure** by clicking the map to drop a pin and setting a radius and reason.
+- The optimiser routes deliveries **around active closures** the next time you press *Optimise*.
+- **Lift** a closure to re-open the road, or **Delete** it. Closures show on every map in red.
 
 ---
 

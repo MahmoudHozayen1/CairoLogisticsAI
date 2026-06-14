@@ -7,12 +7,15 @@ from sqlalchemy import func
 
 from . import bp
 from ...extensions import db
-from ...forms import HubForm, CourierForm
+from ...forms import HubForm, CourierForm, RoadClosureForm
 from ...models import (
-    User, Hub, Shipment, RouteStop, ShipmentStatus, Role,
+    User, Hub, Shipment, RouteStop, RoadClosure, ShipmentStatus, Role,
 )
 from ...utils import role_required
-from ...routing import optimize_and_persist
+from ...routing import (
+    optimize_and_persist, build_overlay, active_closure_dicts,
+    LEVEL_COLORS, LEVEL_LABELS,
+)
 
 admin_only = role_required(Role.ADMIN)
 
@@ -91,11 +94,15 @@ def live_map():
     ).all()
     stops = RouteStop.query.order_by(RouteStop.courier_id, RouteStop.sequence).all()
 
+    closures = active_closure_dicts()
     routes = {}
     for st in stops:
+        points = json.loads(st.path_json) if st.path_json else []
+        overlay = build_overlay(points, closures)
         routes.setdefault(st.courier_id, []).append({
             "sequence": st.sequence,
-            "path": json.loads(st.path_json) if st.path_json else [],
+            "segments": overlay["segments"],
+            "blocked": overlay["blocked"],
             "tracking_number": st.shipment.tracking_number,
             "receiver": st.shipment.receiver_name,
             "coords": st.shipment.coords,
@@ -105,6 +112,7 @@ def live_map():
     return render_template(
         "admin/map.html",
         hubs=hubs, shipments=shipments, routes=routes, courier_names=courier_names,
+        closures=closures, level_colors=LEVEL_COLORS, level_labels=LEVEL_LABELS,
     )
 
 
@@ -206,7 +214,41 @@ def couriers():
             flash("Courier created.", "success")
         return redirect(url_for("admin.couriers"))
     couriers_list = User.query.filter_by(role=Role.COURIER).order_by(User.name).all()
-    return render_template("admin/couriers.html", couriers=couriers_list, form=form)
+    return render_template(
+        "admin/couriers.html",
+        couriers=couriers_list, form=form, hubs=Hub.query.order_by(Hub.name).all(),
+    )
+
+
+@bp.route("/couriers/<int:courier_id>/edit", methods=["POST"])
+@login_required
+@admin_only
+def edit_courier(courier_id):
+    courier = db.get_or_404(User, courier_id)
+    if courier.role != Role.COURIER:
+        flash("That user is not a courier.", "warning")
+        return redirect(url_for("admin.couriers"))
+
+    form = CourierForm()
+    form.hub_id.choices = _hub_choices()
+    if form.validate_on_submit():
+        email = form.email.data.lower().strip()
+        clash = User.query.filter_by(email=email).first()
+        if clash and clash.id != courier.id:
+            flash("Another user already uses that email.", "warning")
+        else:
+            courier.name = form.name.data
+            courier.email = email
+            courier.phone = form.phone.data
+            courier.hub_id = form.hub_id.data
+            courier.vehicle_type = form.vehicle_type.data
+            if form.password.data:  # optional reset
+                courier.set_password(form.password.data)
+            db.session.commit()
+            flash("Courier updated.", "success")
+    else:
+        flash("Could not update courier. Check the values (password, if set, needs 8+ chars).", "danger")
+    return redirect(url_for("admin.couriers"))
 
 
 @bp.route("/couriers/<int:courier_id>/toggle", methods=["POST"])
@@ -219,6 +261,52 @@ def toggle_courier(courier_id):
         db.session.commit()
         flash(f"Courier {'activated' if courier.is_active else 'deactivated'}.", "info")
     return redirect(url_for("admin.couriers"))
+
+
+# --------------------------------------------------------------------------- #
+#  Road closures / traffic
+# --------------------------------------------------------------------------- #
+@bp.route("/closures", methods=["GET", "POST"])
+@login_required
+@admin_only
+def closures():
+    form = RoadClosureForm()
+    if form.validate_on_submit():
+        db.session.add(RoadClosure(
+            name=form.name.data, reason=form.reason.data,
+            lat=form.lat.data, lon=form.lon.data, radius_m=form.radius_m.data,
+        ))
+        db.session.commit()
+        flash("Road closure added. Re-optimise routes to avoid it.", "success")
+        return redirect(url_for("admin.closures"))
+    items = RoadClosure.query.order_by(RoadClosure.is_active.desc(), RoadClosure.created_at.desc()).all()
+    return render_template(
+        "admin/closures.html",
+        closures=items, form=form, hubs=Hub.query.all(),
+        level_colors=LEVEL_COLORS, level_labels=LEVEL_LABELS,
+    )
+
+
+@bp.route("/closures/<int:closure_id>/toggle", methods=["POST"])
+@login_required
+@admin_only
+def toggle_closure(closure_id):
+    c = db.get_or_404(RoadClosure, closure_id)
+    c.is_active = not c.is_active
+    db.session.commit()
+    flash(f"Closure {'re-activated' if c.is_active else 'lifted'}.", "info")
+    return redirect(url_for("admin.closures"))
+
+
+@bp.route("/closures/<int:closure_id>/delete", methods=["POST"])
+@login_required
+@admin_only
+def delete_closure(closure_id):
+    c = db.get_or_404(RoadClosure, closure_id)
+    db.session.delete(c)
+    db.session.commit()
+    flash("Closure deleted.", "info")
+    return redirect(url_for("admin.closures"))
 
 
 # --------------------------------------------------------------------------- #

@@ -4,17 +4,29 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-map"></i> Live Map &amp; Route Optimisation</h3>
-    <form action="{{ url_for('admin.optimize') }}" method="POST" class="d-flex gap-2">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-accent">
-            <i class="bi bi-stars"></i> Optimise all hubs
-        </button>
-    </form>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('admin.closures') }}" class="btn btn-outline-danger">
+            <i class="bi bi-cone-striped"></i> Closures{% if closures %} ({{ closures|length }}){% endif %}
+        </a>
+        <form action="{{ url_for('admin.optimize') }}" method="POST" class="d-flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-accent">
+                <i class="bi bi-stars"></i> Optimise all hubs
+            </button>
+        </form>
+    </div>
 </div>
 
-<div class="alert alert-info small">
-    The optimiser clusters every <strong>At-Warehouse</strong> parcel per available courier (k-means),
-    sequences each route with a nearest-neighbour + 2-opt heuristic, and draws it below.
+{% set ns = namespace(blocked=false) %}
+{% for cid, stops in routes.items() %}{% for st in stops %}{% if st.blocked %}{% set ns.blocked = true %}{% endif %}{% endfor %}{% endfor %}
+{% if ns.blocked %}
+<div class="alert alert-danger small py-2"><i class="bi bi-exclamation-triangle-fill"></i>
+    One or more routes still pass through a <strong>road closure</strong>. Click <strong>Optimise all hubs</strong> to re-route around it.</div>
+{% endif %}
+
+<div class="card card-soft p-3 mb-3">
+    {% include "partials/_traffic_legend.html" %}
+    <div class="text-muted small mt-1">Route lines follow real streets (OSRM) and are coloured by simulated, time-of-day traffic. Re-optimise to refresh.</div>
 </div>
 
 <div class="card card-soft mb-3">
@@ -28,7 +40,9 @@
             <h6 class="fw-bold mb-2"><i class="bi bi-truck"></i> {{ courier_names.get(cid, 'Courier ' ~ cid) }}</h6>
             <ol class="small mb-0 ps-3">
                 {% for st in stops %}
-                <li>{{ st.tracking_number }} — {{ st.receiver }}</li>
+                <li>{{ st.tracking_number }} — {{ st.receiver }}
+                    {% if st.blocked %}<span class="badge bg-danger ms-1">closure</span>{% endif %}
+                </li>
                 {% endfor %}
             </ol>
         </div>
@@ -59,25 +73,35 @@
         bounds.push([{{ s.lat }}, {{ s.lon }}]);
     {% endfor %}
 
-    const colors = ['#0d6efd','#dc3545','#198754','#6f42c1','#fd7e14','#20c997'];
-    let ci = 0;
+    // Route geometry, coloured per segment by traffic congestion.
     {% for cid, stops in routes.items() %}
-        (function() {
-            const color = colors[ci++ % colors.length];
-            {% for st in stops %}
+        {% for st in stops %}
+            {% for seg in st.segments %}
                 {
-                    const path = {{ st.path|tojson }};
-                    if (path && path.length > 1) {
-                        L.polyline(path, { color: color, weight: 4, opacity: .75 }).addTo(map);
+                    const pts = {{ seg.points|tojson }};
+                    if (pts && pts.length > 1) {
+                        L.polyline(pts, {
+                            color: "{{ seg.color }}", weight: 5, opacity: .85,
+                            {% if seg.blocked %}dashArray: '6,8',{% endif %}
+                        }).addTo(map);
                     }
-                    L.circleMarker([{{ st.coords[0] }}, {{ st.coords[1] }}], { radius: 9, color: color, fillColor: color, fillOpacity: .9 })
-                     .addTo(map).bindTooltip("{{ st.sequence }}", { permanent: true, direction: 'center', className: 'seq-label' });
                 }
             {% endfor %}
-        })();
+            L.circleMarker([{{ st.coords[0] }}, {{ st.coords[1] }}], { radius: 9, color: '#0d3b66', fillColor: '#fff', fillOpacity: 1, weight: 2 })
+             .addTo(map).bindTooltip("{{ st.sequence }}", { permanent: true, direction: 'center', className: 'seq-badge' });
+            bounds.push([{{ st.coords[0] }}, {{ st.coords[1] }}]);
+        {% endfor %}
+    {% endfor %}
+
+    // Active road closures.
+    {% for c in closures %}
+        L.circle([{{ c.lat }}, {{ c.lon }}], { radius: {{ c.radius_m }}, color: '#e74c3c', weight: 2, fillColor: '#e74c3c', fillOpacity: .25 })
+         .addTo(map).bindPopup("<b>&#9888; {{ c.name }}</b><br>{{ c.reason or 'Road closed' }}");
+        bounds.push([{{ c.lat }}, {{ c.lon }}]);
     {% endfor %}
 
     if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
 </script>
-<style>.seq-label { background: transparent; border: none; box-shadow: none; color: #fff; font-weight: 700; font-size: 11px; }</style>
+<style>.seq-badge { background: #0d3b66; border: none; box-shadow: none; color: #fff; font-weight: 700; font-size: 11px; border-radius: 10px; padding: 0 6px; }
+.seq-badge::before { display: none; }</style>
 {% endblock %}

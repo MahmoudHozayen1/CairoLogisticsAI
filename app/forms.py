@@ -74,3 +74,12 @@ class DeliveryUpdateForm(FlaskForm):
         FileAllowed(["png", "jpg", "jpeg", "webp", "gif"], "Images only."),
     ])
     submit = SubmitField("Confirm")
+
+
+class RoadClosureForm(FlaskForm):
+    name = StringField("Name / road", validators=[DataRequired(), Length(2, 120)])
+    reason = StringField("Reason", validators=[Optional(), Length(0, 255)])
+    lat = FloatField("Latitude", validators=[DataRequired(), NumberRange(-90, 90)])
+    lon = FloatField("Longitude", validators=[DataRequired(), NumberRange(-180, 180)])
+    radius_m = IntegerField("Radius (m)", validators=[DataRequired(), NumberRange(20, 3000)], default=150)
+    submit = SubmitField("Add closure")

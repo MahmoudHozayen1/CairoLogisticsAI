@@ -154,3 +154,105 @@ def test_optimizer_assigns_routes(app):
         summary = optimize_and_persist()
         assert summary["assigned"] == 5
         assert summary["total_distance_km"] >= 0
+
+
+# --------------------------------------------------------------------------- #
+#  Courier editing (admin)
+# --------------------------------------------------------------------------- #
+def test_admin_can_edit_courier(client, app):
+    login(client, "admin@test.io", "admin12345")
+    with app.app_context():
+        courier = User.query.filter_by(role=Role.COURIER).first()
+        hub = Hub.query.first()
+        cid = courier.id
+
+    r = client.post(f"/admin/couriers/{cid}/edit", data={
+        "name": "Renamed Courier", "email": "renamed@test.io", "phone": "0102223333",
+        "hub_id": hub.id, "vehicle_type": "Van",
+    }, follow_redirects=True)
+    assert r.status_code == 200
+
+    with app.app_context():
+        c = db.session.get(User, cid)
+        assert c.name == "Renamed Courier"
+        assert c.email == "renamed@test.io"
+        assert c.vehicle_type == "Van"
+
+
+def test_edit_courier_rejects_duplicate_email(client, app):
+    login(client, "admin@test.io", "admin12345")
+    with app.app_context():
+        courier = User.query.filter_by(role=Role.COURIER).first()
+        cid = courier.id
+        hub_id = Hub.query.first().id
+    # Try to take the admin's email.
+    client.post(f"/admin/couriers/{cid}/edit", data={
+        "name": "X", "email": "admin@test.io", "hub_id": hub_id,
+        "vehicle_type": "Car",
+    }, follow_redirects=True)
+    with app.app_context():
+        c = db.session.get(User, cid)
+        assert c.email != "admin@test.io"
+
+
+# --------------------------------------------------------------------------- #
+#  Traffic model & road closures
+# --------------------------------------------------------------------------- #
+def test_congestion_levels_and_overlay():
+    from app.routing.street_router import build_overlay, congestion_for, LEVEL_COLORS
+    from datetime import datetime
+
+    # Rush hour is busier than the dead of night for the same place.
+    busy = congestion_for(29.96, 31.25, datetime(2026, 1, 1, 9, 0))
+    calm = congestion_for(29.96, 31.25, datetime(2026, 1, 1, 3, 0))
+    order = ["free", "moderate", "heavy", "severe"]
+    assert order.index(busy) >= order.index(calm)
+
+    pts = [[29.96 + i * 0.001, 31.25 + i * 0.001] for i in range(12)]
+    overlay = build_overlay(pts, closures=[])
+    assert overlay["segments"]
+    assert overlay["blocked"] is False
+    assert all(seg["color"] in LEVEL_COLORS.values() for seg in overlay["segments"])
+
+
+def test_overlay_flags_closure_as_blocked():
+    from app.routing.street_router import build_overlay
+    pts = [[29.960, 31.258], [29.9608, 31.2588], [29.961, 31.259]]
+    closures = [{"id": 1, "name": "X", "reason": None, "lat": 29.9608, "lon": 31.2588, "radius_m": 200}]
+    overlay = build_overlay(pts, closures=closures)
+    assert overlay["blocked"] is True
+    assert any(seg["blocked"] for seg in overlay["segments"])
+
+
+def test_admin_closure_crud(client, app):
+    login(client, "admin@test.io", "admin12345")
+    r = client.post("/admin/closures", data={
+        "name": "Test Closure", "reason": "Accident",
+        "lat": 29.9608, "lon": 31.2588, "radius_m": 150,
+    }, follow_redirects=True)
+    assert r.status_code == 200
+    with app.app_context():
+        from app.models import RoadClosure
+        c = RoadClosure.query.filter_by(name="Test Closure").first()
+        assert c is not None and c.is_active
+        cid = c.id
+
+    client.post(f"/admin/closures/{cid}/toggle", follow_redirects=True)
+    with app.app_context():
+        from app.models import RoadClosure
+        assert db.session.get(RoadClosure, cid).is_active is False
+
+    client.post(f"/admin/closures/{cid}/delete", follow_redirects=True)
+    with app.app_context():
+        from app.models import RoadClosure
+        assert db.session.get(RoadClosure, cid) is None
+
+
+def test_route_geometry_straight_provider(app):
+    """With the testing provider 'straight', geometry is a direct 2-point line."""
+    from app.routing import route_geometry
+    with app.app_context():
+        geom = route_geometry([29.96, 31.25], [29.97, 31.26], closures=[])
+        assert geom["points"] == [[29.96, 31.25], [29.97, 31.26]]
+        assert geom["blocked"] is False
+        assert geom["distance_km"] > 0

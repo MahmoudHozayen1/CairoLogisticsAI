@@ -182,6 +182,10 @@ def optimize_and_persist(hub: Hub | None = None):
     hubs = [hub] if hub else Hub.query.all()
     summary = {"routes": [], "total_distance_km": 0.0, "assigned": 0, "unassigned": 0}
 
+    # Active road closures are avoided by the drawn geometry (see street_router).
+    from .street_router import route_geometry, active_closure_dicts
+    closures = active_closure_dicts()
+
     for h in hubs:
         # Only route parcels that are physically at the hub and not yet delivered.
         shipments = (
@@ -219,9 +223,11 @@ def optimize_and_persist(hub: Hub | None = None):
                 "distance_km": 0.0,
             }
             for seq, s in enumerate(ordered, start=1):
-                leg_km = haversine_km(current, s.coords)
+                # Road-following geometry that avoids active closures.
+                geom = route_geometry(current, s.coords, closures)
+                path = geom["points"]
+                leg_km = geom["distance_km"] or haversine_km(current, s.coords)
                 cumulative_min += (leg_km / AVERAGE_SPEED_KMH) * 60 + SERVICE_TIME_MIN
-                path = _street_path(current, s.coords)
 
                 # Persist assignment on the shipment.
                 s.courier_id = courier.id

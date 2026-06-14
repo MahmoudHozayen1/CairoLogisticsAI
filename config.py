@@ -70,6 +70,17 @@ class Config:
     # uses the fast pure-Python fallback (straight-line geometry).
     ENABLE_STREET_ROUTING = os.environ.get("ENABLE_STREET_ROUTING", "0") == "1"
 
+    # Street-following geometry + traffic ---------------------------------
+    # Provider for drawing routes that follow real roads:
+    #   "osrm"     -> call a public OSRM server (default; no API key, cached).
+    #   "osmnx"    -> use a locally downloaded street graph (heavy, optional).
+    #   "straight" -> straight lines only (offline-safe fallback).
+    # The optimizer always degrades gracefully to straight lines if the chosen
+    # provider is unreachable, so the system never fails.
+    ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "osrm")
+    OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org")
+    ROUTING_TIMEOUT = float(os.environ.get("ROUTING_TIMEOUT", "6"))
+
     # Deployment bootstrap -------------------------------------------------
     # On platforms like Render/Railway there is no shell step to create tables.
     # Set AUTO_INIT_DB=1 to create any missing tables on startup, and SEED_DEMO=1
@@ -91,6 +102,8 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
+    # Never hit the network during tests; draw straight lines.
+    ROUTING_PROVIDER = "straight"
 
 
 config_by_name = {

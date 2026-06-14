@@ -18,7 +18,7 @@ app = create_app()
 def shell_context():
     from app import models
     return {"db": db, **{n: getattr(models, n) for n in (
-        "User", "Hub", "Shipment", "ShipmentEvent", "RouteStop", "Role", "ShipmentStatus",
+        "User", "Hub", "Shipment", "ShipmentEvent", "RouteStop", "RoadClosure", "Role", "ShipmentStatus",
     )}}
 
 

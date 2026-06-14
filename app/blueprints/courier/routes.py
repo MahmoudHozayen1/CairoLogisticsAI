@@ -9,6 +9,7 @@ from ...extensions import db
 from ...forms import DeliveryUpdateForm
 from ...models import Shipment, RouteStop, ShipmentStatus, Role
 from ...utils import role_required, save_proof_image
+from ...routing import build_overlay, active_closure_dicts, LEVEL_COLORS, LEVEL_LABELS
 
 courier_only = role_required(Role.COURIER)
 
@@ -46,19 +47,28 @@ def dashboard():
 @courier_only
 def route_map():
     active = _my_active_shipments()
+    closures = active_closure_dicts()
     stops = []
+    blocked_any = False
     for s in active:
         rs = RouteStop.query.filter_by(shipment_id=s.id).first()
+        points = json.loads(rs.path_json) if rs and rs.path_json else []
+        overlay = build_overlay(points, closures)
+        blocked_any = blocked_any or overlay["blocked"]
         stops.append({
             "tracking_number": s.tracking_number,
             "receiver": s.receiver_name,
             "coords": s.coords,
             "sequence": s.route_sequence or 0,
-            "path": json.loads(rs.path_json) if rs and rs.path_json else [],
+            "segments": overlay["segments"],
+            "blocked": overlay["blocked"],
             "eta": rs.eta_minutes if rs else None,
         })
     hub = current_user.hub
-    return render_template("courier/route_map.html", stops=stops, hub=hub)
+    return render_template(
+        "courier/route_map.html", stops=stops, hub=hub, closures=closures,
+        blocked_any=blocked_any, level_colors=LEVEL_COLORS, level_labels=LEVEL_LABELS,
+    )
 
 
 @bp.route("/shipment/<int:shipment_id>", methods=["GET", "POST"])

@@ -36,9 +36,10 @@ FIRST_NAMES = ["Ahmed", "Sara", "Mohamed", "Nour", "Omar", "Mariam", "Youssef", 
 def _maybe_clear():
     """Wipe existing rows so reseeding is idempotent."""
     db.session.query(Shipment).delete()
-    from app.models import ShipmentEvent, RouteStop
+    from app.models import ShipmentEvent, RouteStop, RoadClosure
     db.session.query(RouteStop).delete()
     db.session.query(ShipmentEvent).delete()
+    db.session.query(RoadClosure).delete()
     db.session.query(User).delete()
     db.session.query(Hub).delete()
     db.session.commit()
@@ -140,12 +141,20 @@ def seed_data():
         s.status = status
         db.session.add(s)
 
+    # --- A demo road closure near a busy delivery area -------------------
+    from app.models import RoadClosure
+    db.session.add(RoadClosure(
+        name="Road 9 — construction",
+        reason="Road works, expect detours",
+        lat=29.9608, lon=31.2588, radius_m=180,
+    ))
+
     db.session.commit()
     print("Seeded:")
     print("  Admin     -> admin@swiftroute.app / admin12345")
     print("  Courier   -> courier1@swiftroute.app / courier123")
     print("  Merchant  -> merchant1@swiftroute.app / merchant123")
-    print(f"  {len(statuses_plan)} shipments, 2 hubs, {len(couriers)} couriers.")
+    print(f"  {len(statuses_plan)} shipments, 2 hubs, {len(couriers)} couriers, 1 road closure.")
 
 
 if __name__ == "__main__":

@@ -63,10 +63,13 @@ Salesman Problem**. Exact solutions are infeasible beyond a handful of stops, so
 **nearest-neighbour heuristic** for a fast first tour, then refine it with **2-opt** local search
 (repeatedly un-crossing the route). This gives near-optimal routes in milliseconds.
 
-**Step 4 — Geometry & ETA.** By default we draw straight lines between stops (fast, no
-dependencies). When `ENABLE_STREET_ROUTING=1`, we download a real street graph with **OSMnx** and
-compute shortest driving paths with **Dijkstra on travel-time** (NetworkX), so routes follow actual
-roads. ETAs come from distance ÷ average courier speed + per-stop service time.
+**Step 4 — Geometry & ETA.** Routes must *follow real streets*, not cut across buildings. We chose
+**OSRM** (the public Open Source Routing Machine) reached over plain HTTP: it returns road-following
+geometry, needs **no API key**, and is far lighter than downloading a street graph. Responses are
+cached on disk so re-optimising is instant, and a small **circuit breaker** falls back to straight
+lines if OSRM is unreachable (so the system never hangs offline). An optional local **OSMnx** graph
+is still supported via `ROUTING_PROVIDER=osmnx`. ETAs come from street distance ÷ average courier
+speed + per-stop service time.
 
 **The dependency dilemma.** scikit-learn, OSMnx, NumPy and NetworkX are heavy, slow to install, and
 on bleeding-edge Python (3.14) may lack pre-built wheels. We refused to let the core feature depend
@@ -75,9 +78,40 @@ on them.
 **What we chose.** The optimiser is **pure-Python by default** with optional acceleration:
 - Haversine distance — pure Python.
 - k-means — uses scikit-learn *if present*, otherwise a tiny built-in implementation.
-- Street routing — uses OSMnx *if enabled and installed*, otherwise straight lines.
+- Street geometry — OSRM over HTTP (standard library only), straight-line fallback, OSMnx optional.
 
 The result always runs; the heavy libraries only ever make it *nicer*, never *necessary*.
+
+---
+
+## 3b. Traffic visualisation and road closures
+
+**The ask.** Show "how busy the roads are" and "if there are any closures" — like Google Maps.
+
+**The honest constraint.** There is no free, key-less live-traffic feed for Cairo. Rather than fake
+a data source, we built an explicit, defensible **traffic *model*** and label it as simulated in the
+UI:
+- Each road segment gets a congestion level (clear / moderate / busy / heavy) from a **deterministic,
+  time-of-day function**: a per-road hash (some roads are consistently busier) combined with a
+  rush-hour curve that peaks around 09:00 and 18:00. The same street therefore looks calmer at
+  night and congested at rush hour, and the colours are stable and explainable.
+- Levels map to Google-Maps-style colours and a travel-time multiplier; the route polyline is split
+  into coloured segments on every map, with a legend.
+
+**Road closures — making them *do* something.** Closures are a first-class, admin-managed entity
+(`RoadClosure`: a centre, radius, reason, active flag). They are not just markers:
+- The optimiser **re-routes the drawn geometry around** active closures by asking OSRM for a detour
+  via a point offset perpendicular to the blocked leg.
+- If no detour clears it (e.g. the destination's own road is closed), the leg is returned
+  `blocked=True` and rendered as a **dashed red line with a warning** — an honest "we couldn't avoid
+  this" rather than a silent wrong route.
+- Closures are computed at **render time** for the overlay (so a newly added closure immediately
+  shows as a warning) and at **optimise time** for the geometry (so re-optimising actually re-routes).
+
+**Why this split (store geometry, compute traffic live).** Street geometry is expensive (an OSRM
+call) so we **persist** it on the `RouteStop`. Traffic colour and closure flags are cheap and
+*time-dependent*, so we compute them **freshly on each page load** from the stored geometry — the map
+reflects "now" without re-running the optimiser.
 
 ---
 

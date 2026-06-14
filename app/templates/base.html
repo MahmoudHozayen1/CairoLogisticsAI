@@ -33,6 +33,7 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.shipments') }}">Shipments</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.hubs') }}">Hubs</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.couriers') }}">Couriers</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.closures') }}">Traffic</a></li>
                     {% elif current_user.is_courier %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('courier.dashboard') }}">My Deliveries</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('courier.route_map') }}">My Route</a></li>

@@ -7,6 +7,15 @@
     <a href="{{ url_for('courier.dashboard') }}" class="btn btn-outline-secondary btn-sm">Back to list</a>
 </div>
 
+{% if blocked_any %}
+<div class="alert alert-danger small py-2"><i class="bi bi-exclamation-triangle-fill"></i>
+    Part of your route is affected by a <strong>road closure</strong> (dashed red). Follow the live detour and drive carefully.</div>
+{% endif %}
+
+<div class="card card-soft p-3 mb-3">
+    {% include "partials/_traffic_legend.html" %}
+</div>
+
 <div class="card card-soft mb-3"><div id="map" class="map-box map-tall"></div></div>
 
 <div class="card card-soft p-3">
@@ -15,6 +24,7 @@
         <li class="mb-1">
             <span class="tracking-code">{{ st.tracking_number }}</span> — {{ st.receiver }}
             {% if st.eta %}<span class="text-muted small">· ETA ~{{ st.eta }} min</span>{% endif %}
+            {% if st.blocked %}<span class="badge bg-danger ms-1">closure on route</span>{% endif %}
         </li>
         {% else %}
         <li class="text-muted">No optimised stops yet.</li>
@@ -36,11 +46,25 @@
     {% endif %}
 
     {% for st in stops %}
-        const path{{ loop.index }} = {{ st.path|tojson }};
-        if (path{{ loop.index }} && path{{ loop.index }}.length > 1) L.polyline(path{{ loop.index }}, { color:'#0d6efd', weight:4, opacity:.75 }).addTo(map);
+        {% for seg in st.segments %}
+            {
+                const pts = {{ seg.points|tojson }};
+                if (pts && pts.length > 1) {
+                    L.polyline(pts, {
+                        color: "{{ seg.color }}", weight: 5, opacity: .85,
+                        {% if seg.blocked %}dashArray: '6,8',{% endif %}
+                    }).addTo(map);
+                }
+            }
+        {% endfor %}
         L.marker([{{ st.coords[0] }}, {{ st.coords[1] }}]).addTo(map)
             .bindTooltip("{{ st.sequence }}. {{ st.receiver }}", { permanent:false });
         bounds.push([{{ st.coords[0] }}, {{ st.coords[1] }}]);
+    {% endfor %}
+
+    {% for c in closures %}
+        L.circle([{{ c.lat }}, {{ c.lon }}], { radius: {{ c.radius_m }}, color:'#e74c3c', weight:2, fillColor:'#e74c3c', fillOpacity:.25 })
+         .addTo(map).bindPopup("<b>&#9888; {{ c.name }}</b><br>{{ c.reason or 'Road closed' }}");
     {% endfor %}
 
     if (bounds.length) map.fitBounds(bounds, { padding:[40,40] });

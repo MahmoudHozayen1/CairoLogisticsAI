@@ -296,3 +296,46 @@ class RouteStop(db.Model):
     path_json = db.Column(db.Text)
     eta_minutes = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=utcnow)
+
+
+# --------------------------------------------------------------------------- #
+#  Road closure / blocked road (admin-managed)
+# --------------------------------------------------------------------------- #
+class RoadClosure(db.Model):
+    """A circular area an admin marks as closed/blocked.
+
+    Closures are shown on every map and are actively avoided by the route
+    optimiser (it re-routes the drawn geometry around them). Any route leg that
+    still passes through an active closure is flagged in red on the map.
+    """
+    __tablename__ = "road_closures"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    reason = db.Column(db.String(255))
+    lat = db.Column(db.Float, nullable=False)
+    lon = db.Column(db.Float, nullable=False)
+    radius_m = db.Column(db.Integer, default=150, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+
+    @property
+    def coords(self):
+        return [self.lat, self.lon]
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "reason": self.reason,
+            "lat": self.lat,
+            "lon": self.lon,
+            "radius_m": self.radius_m,
+        }
+
+    @classmethod
+    def active(cls):
+        return cls.query.filter_by(is_active=True).all()
+
+    def __repr__(self):
+        return f"<RoadClosure {self.name} r={self.radius_m}m active={self.is_active}>"

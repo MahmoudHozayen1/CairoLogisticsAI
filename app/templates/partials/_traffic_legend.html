@@ -1,0 +1,14 @@
+{# Traffic colour legend. Requires `level_colors` and `level_labels` in context. #}
+<div class="d-flex flex-wrap align-items-center gap-3 small">
+    <span class="fw-bold text-primary-dark"><i class="bi bi-stoplights"></i> Traffic:</span>
+    {% for level, color in level_colors.items() %}
+        <span class="d-inline-flex align-items-center gap-1">
+            <span style="display:inline-block;width:16px;height:6px;background:{{ color }};border-radius:3px;"></span>
+            {{ level_labels[level] }}
+        </span>
+    {% endfor %}
+    <span class="d-inline-flex align-items-center gap-1">
+        <span style="display:inline-block;width:16px;height:0;border-top:3px dashed #e74c3c;"></span>
+        Closure / blocked
+    </span>
+</div>
