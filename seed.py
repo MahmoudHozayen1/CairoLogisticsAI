@@ -48,7 +48,7 @@ def seed_data():
     _maybe_clear()
 
     # --- Admin -----------------------------------------------------------
-    admin = User(name="Site Administrator", email="admin@swiftroute.test", role=Role.ADMIN, phone="0100000000")
+    admin = User(name="Site Administrator", email="admin@swiftroute.app", role=Role.ADMIN, phone="0100000000")
     admin.set_password("admin12345")
     db.session.add(admin)
 
@@ -66,7 +66,7 @@ def seed_data():
         ("Tarek Wheels", nasr, "Van"),
     ], start=1):
         c = User(
-            name=name, email=f"courier{i}@swiftroute.test", role=Role.COURIER,
+            name=name, email=f"courier{i}@swiftroute.app", role=Role.COURIER,
             hub_id=hub.id, vehicle_type=vehicle, phone=f"0101111111{i}",
         )
         c.set_password("courier123")
@@ -80,7 +80,7 @@ def seed_data():
         ("Noon Vendor", "Noon Marketplace"),
     ], start=1):
         m = User(
-            name=name, email=f"merchant{i}@swiftroute.test", role=Role.MERCHANT,
+            name=name, email=f"merchant{i}@swiftroute.app", role=Role.MERCHANT,
             business_name=biz, phone=f"0102222222{i}",
         )
         m.set_password("merchant123")
@@ -142,9 +142,9 @@ def seed_data():
 
     db.session.commit()
     print("Seeded:")
-    print("  Admin     -> admin@swiftroute.test / admin12345")
-    print("  Courier   -> courier1@swiftroute.test / courier123")
-    print("  Merchant  -> merchant1@swiftroute.test / merchant123")
+    print("  Admin     -> admin@swiftroute.app / admin12345")
+    print("  Courier   -> courier1@swiftroute.app / courier123")
+    print("  Merchant  -> merchant1@swiftroute.app / merchant123")
     print(f"  {len(statuses_plan)} shipments, 2 hubs, {len(couriers)} couriers.")
 
 

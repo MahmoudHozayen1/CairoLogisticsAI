@@ -29,7 +29,26 @@ def create_app(config_name=None):
     _register_error_handlers(app)
     _register_cli(app)
 
+    _bootstrap_database(app)
+
     return app
+
+
+def _bootstrap_database(app):
+    """Create tables (and optionally seed) on startup for shell-less deploys.
+
+    Controlled by AUTO_INIT_DB / SEED_DEMO so it is a no-op in normal local use.
+    """
+    if not app.config.get("AUTO_INIT_DB"):
+        return
+    with app.app_context():
+        db.create_all()
+        if app.config.get("SEED_DEMO"):
+            from .models import User
+            if db.session.query(User.id).first() is None:
+                from seed import seed_data
+                seed_data()
+                app.logger.info("Seeded demo data on first boot.")
 
 
 def _register_blueprints(app):

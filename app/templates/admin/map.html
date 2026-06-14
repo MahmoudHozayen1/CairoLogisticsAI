@@ -65,12 +65,14 @@
         (function() {
             const color = colors[ci++ % colors.length];
             {% for st in stops %}
-                const path = {{ st.path|tojson }};
-                if (path && path.length > 1) {
-                    L.polyline(path, { color: color, weight: 4, opacity: .75 }).addTo(map);
+                {
+                    const path = {{ st.path|tojson }};
+                    if (path && path.length > 1) {
+                        L.polyline(path, { color: color, weight: 4, opacity: .75 }).addTo(map);
+                    }
+                    L.circleMarker([{{ st.coords[0] }}, {{ st.coords[1] }}], { radius: 9, color: color, fillColor: color, fillOpacity: .9 })
+                     .addTo(map).bindTooltip("{{ st.sequence }}", { permanent: true, direction: 'center', className: 'seq-label' });
                 }
-                L.circleMarker([{{ st.coords[0] }}, {{ st.coords[1] }}], { radius: 9, color: color, fillColor: color, fillOpacity: .9 })
-                 .addTo(map).bindTooltip("{{ st.sequence }}", { permanent: true, direction: 'center', className: 'seq-label' });
             {% endfor %}
         })();
     {% endfor %}

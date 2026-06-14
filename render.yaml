@@ -1,0 +1,43 @@
+# Render Blueprint — one-click deploy of SwiftRoute + a managed PostgreSQL.
+#
+# How to use:
+#   1. Push this repo to GitHub (already done).
+#   2. Go to https://dashboard.render.com/blueprints and "New Blueprint Instance".
+#      (Or use the deploy button in the README.)
+#   3. Render reads this file, provisions the database and web service, wires the
+#      DATABASE_URL automatically, and boots the app.
+#
+# AUTO_INIT_DB + SEED_DEMO make the first boot create tables and load demo data,
+# so the site is usable immediately with the documented demo accounts.
+services:
+  - type: web
+    name: swiftroute
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    healthCheckPath: /
+    envVars:
+      - key: FLASK_CONFIG
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AUTO_INIT_DB
+        value: "1"
+      - key: SEED_DEMO
+        value: "1"
+      - key: ENABLE_STREET_ROUTING
+        value: "0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: swiftroute-db
+          property: connectionString
+
+databases:
+  - name: swiftroute-db
+    plan: free
+    region: frankfurt

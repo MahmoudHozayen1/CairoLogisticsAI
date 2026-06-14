@@ -26,6 +26,26 @@
 
 ---
 
+## 📸 Screenshots
+
+| Landing page | Public parcel tracking |
+| --- | --- |
+| [![Landing](docs/screenshots/01-landing.png)](docs/screenshots/01-landing.png) | [![Public tracking](docs/screenshots/02-public-tracking.png)](docs/screenshots/02-public-tracking.png) |
+
+| Admin operations dashboard | Live map & AI route optimisation |
+| --- | --- |
+| [![Admin dashboard](docs/screenshots/03-admin-dashboard.png)](docs/screenshots/03-admin-dashboard.png) | [![Live map](docs/screenshots/04-admin-live-map.png)](docs/screenshots/04-admin-live-map.png) |
+
+| Merchant — create shipment (pin on map) | Courier — my deliveries |
+| --- | --- |
+| [![Create shipment](docs/screenshots/05-merchant-create.png)](docs/screenshots/05-merchant-create.png) | [![Courier deliveries](docs/screenshots/06-courier-dashboard.png)](docs/screenshots/06-courier-dashboard.png) |
+
+> Regenerate these anytime by running the app, then
+> [`scripts/capture_screenshots.py`](scripts/capture_screenshots.py) (headless Playwright;
+> `pip install playwright && python -m playwright install chromium`).
+
+---
+
 ## 🏗️ Architecture
 
 ```
@@ -72,13 +92,34 @@ Open <http://127.0.0.1:5000>.
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | `admin@swiftroute.test` | `admin12345` |
-| Courier | `courier1@swiftroute.test` | `courier123` |
-| Merchant | `merchant1@swiftroute.test` | `merchant123` |
+| Admin | `admin@swiftroute.app` | `admin12345` |
+| Courier | `courier1@swiftroute.app` | `courier123` |
+| Merchant | `merchant1@swiftroute.app` | `merchant123` |
 
 > First time? **Sign in as the merchant** and create a shipment, **switch to admin** to mark it
 > *At Warehouse* and **Optimise**, then **sign in as the courier** to deliver it. Finally, track it
 > publicly on the **Track** page.
+
+---
+
+## ☁️ Deploy in one click
+
+The repo ships ready-made config for two popular hosts. Both provision a managed PostgreSQL,
+create the tables and load demo data automatically on first boot (via `AUTO_INIT_DB` + `SEED_DEMO`),
+so the live site is usable immediately with the demo accounts above.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MahmoudHozayen1/CairoLogisticsAI)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.com/new)
+
+**Render** (reads [`render.yaml`](render.yaml)) — click the button, or from the dashboard choose
+*New → Blueprint* and pick this repo. Render wires `DATABASE_URL` to the database for you.
+
+**Railway** (reads [`railway.json`](railway.json) + [`Procfile`](Procfile)) — create a project from
+this repo, add the **PostgreSQL** plugin, then set the service variables
+`FLASK_CONFIG=production`, `AUTO_INIT_DB=1`, `SEED_DEMO=1`, and generate a `SECRET_KEY`.
+
+> Any other host works too: it's a standard WSGI app served by
+> `gunicorn wsgi:app` with a `Procfile`. Set `DATABASE_URL` and `SECRET_KEY` and you're done.
 
 ---
 

@@ -6,9 +6,9 @@ A walkthrough of how to use the system, screen by screen, for each kind of user.
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | `admin@swiftroute.test` | `admin12345` |
-| Courier | `courier1@swiftroute.test` | `courier123` |
-| Merchant | `merchant1@swiftroute.test` | `merchant123` |
+| Admin | `admin@swiftroute.app` | `admin12345` |
+| Courier | `courier1@swiftroute.app` | `courier123` |
+| Merchant | `merchant1@swiftroute.app` | `merchant123` |
 
 ---
 

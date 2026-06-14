@@ -52,6 +52,25 @@ def test_landing_and_track_public(client):
     assert client.get("/track/").status_code == 200
 
 
+def test_demo_email_domain_can_log_in(client, app):
+    """Regression: reserved TLDs (.test/.example) fail WTForms Email() validation.
+
+    Demo/seed accounts must use a real TLD or nobody can sign in via the form.
+    A successful login issues a 302 redirect; a validation failure re-renders (200).
+    """
+    with app.app_context():
+        u = User(name="Demo Admin", email="admin@swiftroute.app", role=Role.ADMIN)
+        u.set_password("admin12345")
+        db.session.add(u)
+        db.session.commit()
+    r = client.post(
+        "/auth/login",
+        data={"email": "admin@swiftroute.app", "password": "admin12345"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 302, "Demo email domain was rejected by the login form"
+
+
 def test_register_creates_merchant(client):
     r = client.post("/auth/register", data={
         "name": "New Merchant", "business_name": "Biz", "email": "new@test.io",

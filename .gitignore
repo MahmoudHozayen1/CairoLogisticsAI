@@ -41,3 +41,6 @@ Thumbs.db
 # Personal / non-code documents (not published)
 *.pdf
 *.docx
+
+# Office lock/temp files (created while a doc is open)
+~$*

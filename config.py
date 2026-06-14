@@ -70,6 +70,13 @@ class Config:
     # uses the fast pure-Python fallback (straight-line geometry).
     ENABLE_STREET_ROUTING = os.environ.get("ENABLE_STREET_ROUTING", "0") == "1"
 
+    # Deployment bootstrap -------------------------------------------------
+    # On platforms like Render/Railway there is no shell step to create tables.
+    # Set AUTO_INIT_DB=1 to create any missing tables on startup, and SEED_DEMO=1
+    # to load demo data the first time (only when the database is empty).
+    AUTO_INIT_DB = os.environ.get("AUTO_INIT_DB", "0") == "1"
+    SEED_DEMO = os.environ.get("SEED_DEMO", "0") == "1"
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

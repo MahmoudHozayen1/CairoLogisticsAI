@@ -111,7 +111,7 @@ SLIDES = [
     ], None),
     ("Thank You", [
         "Questions & discussion.",
-        "Demo: admin@swiftroute.test / courier1@swiftroute.test / merchant1@swiftroute.test",
+        "Demo: admin@swiftroute.app / courier1@swiftroute.app / merchant1@swiftroute.app",
         "Repository: see the project README.",
     ], "TITLE"),
 ]
