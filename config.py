@@ -37,6 +37,17 @@ def _normalize_db_url(url: str) -> str:
     return url
 
 
+def _env_bool(name: str, default: str = "0") -> bool:
+    """Parse a boolean environment variable tolerantly.
+
+    Accepts ``1``, ``true``, ``yes`` and ``on`` (any case) as true. Deployment
+    dashboards (Railway, Render, …) make people type ``true`` naturally, so this
+    avoids the trap where ``AUTO_INIT_DB=true`` silently evaluates to false and
+    the database tables are never created.
+    """
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me-in-production")
 
@@ -68,7 +79,7 @@ class Config:
     SERVICE_RADIUS_M = int(os.environ.get("SERVICE_RADIUS_M", "5000"))
     # When false, the optimizer skips the heavy OSMnx street-graph download and
     # uses the fast pure-Python fallback (straight-line geometry).
-    ENABLE_STREET_ROUTING = os.environ.get("ENABLE_STREET_ROUTING", "0") == "1"
+    ENABLE_STREET_ROUTING = _env_bool("ENABLE_STREET_ROUTING")
 
     # Street-following geometry + traffic ---------------------------------
     # Provider for drawing routes that follow real roads:
@@ -85,8 +96,8 @@ class Config:
     # On platforms like Render/Railway there is no shell step to create tables.
     # Set AUTO_INIT_DB=1 to create any missing tables on startup, and SEED_DEMO=1
     # to load demo data the first time (only when the database is empty).
-    AUTO_INIT_DB = os.environ.get("AUTO_INIT_DB", "0") == "1"
-    SEED_DEMO = os.environ.get("SEED_DEMO", "0") == "1"
+    AUTO_INIT_DB = _env_bool("AUTO_INIT_DB")
+    SEED_DEMO = _env_bool("SEED_DEMO")
 
 
 class DevelopmentConfig(Config):

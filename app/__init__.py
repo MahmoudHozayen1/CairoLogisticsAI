@@ -42,13 +42,21 @@ def _bootstrap_database(app):
     if not app.config.get("AUTO_INIT_DB"):
         return
     with app.app_context():
-        db.create_all()
+        try:
+            db.create_all()
+        except Exception as exc:  # pragma: no cover - concurrent worker race
+            db.session.rollback()
+            app.logger.warning("create_all() skipped: %s", exc)
         if app.config.get("SEED_DEMO"):
             from .models import User
-            if db.session.query(User.id).first() is None:
-                from seed import seed_data
-                seed_data()
-                app.logger.info("Seeded demo data on first boot.")
+            try:
+                if db.session.query(User.id).first() is None:
+                    from seed import seed_data
+                    seed_data()
+                    app.logger.info("Seeded demo data on first boot.")
+            except Exception as exc:  # pragma: no cover - concurrent seed race
+                db.session.rollback()
+                app.logger.warning("Demo seed skipped (already running?): %s", exc)
 
 
 def _register_blueprints(app):
