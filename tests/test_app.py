@@ -256,3 +256,86 @@ def test_route_geometry_straight_provider(app):
         assert geom["points"] == [[29.96, 31.25], [29.97, 31.26]]
         assert geom["blocked"] is False
         assert geom["distance_km"] > 0
+
+
+# --------------------------------------------------------------------------- #
+#  Dispatch-time planning & multiple optimisation techniques
+# --------------------------------------------------------------------------- #
+def test_weekend_traffic_is_lighter():
+    """Cairo's weekend (Fri/Sat) should carry less simulated traffic than mid-week."""
+    from app.routing.street_router import _day_factor
+    assert _day_factor(4) < _day_factor(1)   # Friday < Tuesday
+    assert _day_factor(5) < _day_factor(1)   # Saturday < Tuesday
+
+
+def test_resolve_departure_picks_weekday_and_time():
+    from app.routing import resolve_departure
+    from datetime import datetime
+
+    base = datetime(2026, 1, 5, 8, 0)  # a Monday
+    dep = resolve_departure(day="Friday", hour=18, minute=0, now=base)
+    assert dep.weekday() == 4               # Friday
+    assert (dep.hour, dep.minute) == (18, 0)
+    assert dep >= base                      # rolls forward, never into the past
+    # No hour given -> "right now".
+    assert resolve_departure(day="today", hour=None, now=base) == base
+
+
+def test_strategy_comparison_recommends(app):
+    """Every technique is estimated and the recommendation never loses to FIFO."""
+    from app.routing import compare_strategies, STRATEGY_ORDER
+    from datetime import datetime
+
+    with app.app_context():
+        hub = Hub.query.first()
+        merchant = User.query.filter_by(role=Role.MERCHANT).first()
+        # A deliberately scrambled set of drop-offs so FIFO is a poor order.
+        offsets = [
+            (0.010, 0.010), (-0.008, 0.006), (0.009, -0.007), (-0.006, -0.009),
+            (0.004, 0.011), (-0.011, 0.003), (0.007, 0.002), (-0.003, -0.004),
+        ]
+        for i, (dlat, dlon) in enumerate(offsets):
+            db.session.add(Shipment(
+                tracking_number=generate_tracking_number(),
+                merchant_id=merchant.id, hub_id=hub.id,
+                sender_name="Shop", receiver_name=f"R{i}", receiver_phone="010",
+                lat=29.96 + dlat, lon=31.25 + dlon,
+                status=ShipmentStatus.AT_WAREHOUSE,
+            ))
+        db.session.commit()
+
+        cmp = compare_strategies(departure=datetime(2026, 1, 6, 9, 0))
+        assert [r["key"] for r in cmp["results"]] == STRATEGY_ORDER
+        assert cmp["stops"] == 8
+        assert all(r["duration_min"] > 0 and r["distance_km"] > 0 for r in cmp["results"])
+        durations = {r["key"]: r["duration_min"] for r in cmp["results"]}
+        assert durations[cmp["recommended"]] <= durations["fifo"]
+        assert cmp["recommended"] in durations
+
+
+def test_optimize_with_strategy_and_departure(app):
+    """Persisting a chosen technique at a chosen time yields increasing ETAs."""
+    from app.routing import optimize_and_persist
+    from app.models import RouteStop
+    from datetime import datetime
+
+    with app.app_context():
+        hub = Hub.query.first()
+        merchant = User.query.filter_by(role=Role.MERCHANT).first()
+        for i in range(6):
+            db.session.add(Shipment(
+                tracking_number=generate_tracking_number(),
+                merchant_id=merchant.id, hub_id=hub.id,
+                sender_name="Shop", receiver_name=f"R{i}", receiver_phone="010",
+                lat=29.96 + i * 0.002, lon=31.25 + i * 0.0015,
+                status=ShipmentStatus.AT_WAREHOUSE,
+            ))
+        db.session.commit()
+
+        summary = optimize_and_persist(strategy="nearest", departure=datetime(2026, 1, 6, 18, 0))
+        assert summary["assigned"] == 6
+        assert summary["strategy"] == "nearest"
+        assert summary["strategy_label"]
+        etas = [rs.eta_minutes for rs in RouteStop.query.order_by(RouteStop.sequence).all()]
+        assert etas == sorted(etas)         # ETAs accumulate along the route
+        assert etas[-1] > 0

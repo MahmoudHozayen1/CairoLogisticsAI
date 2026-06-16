@@ -35,14 +35,27 @@
         <div class="col-lg-6">
             <div class="card card-soft p-4">
                 <h6 class="fw-bold mb-2">Delivery location</h6>
-                <p class="small text-muted">Click the map to drop a pin on the delivery address.</p>
+                <p class="small text-muted mb-2">Search the address below, use your current location, or click the map / drag the pin. The coordinates fill in automatically.</p>
+
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="geo-search" class="form-control"
+                           placeholder="Search address, area or landmark (e.g. Road 9, Maadi)" autocomplete="off">
+                    <button class="btn btn-primary" type="button" id="geo-search-btn">Search</button>
+                    <button class="btn btn-outline-secondary" type="button" id="geo-locate" title="Use my current location">
+                        <i class="bi bi-geo-alt"></i>
+                    </button>
+                </div>
+                <div id="geo-status" class="small text-muted mb-1"></div>
+                <ul id="geo-results" class="list-group small mb-2 d-none" style="max-height:170px;overflow:auto;"></ul>
+
                 <div class="row g-2 mb-2">
-                    <div class="col">{{ form.lat.label(class="form-label") }}{{ form.lat(class="form-control", id="lat") }}
+                    <div class="col">{{ form.lat.label(class="form-label") }}{{ form.lat(class="form-control", id="lat", readonly=true, placeholder="Set from search / map") }}
                         {% for e in form.lat.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
-                    <div class="col">{{ form.lon.label(class="form-label") }}{{ form.lon(class="form-control", id="lon") }}
+                    <div class="col">{{ form.lon.label(class="form-label") }}{{ form.lon(class="form-control", id="lon", readonly=true, placeholder="Set from search / map") }}
                         {% for e in form.lon.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
                 </div>
-                <div id="picker" class="map-box" style="height:380px;"></div>
+                <div id="picker" class="map-box" style="height:340px;"></div>
             </div>
         </div>
     </div>
@@ -58,14 +71,89 @@
 <script>
     const picker = L.map('picker').setView([29.9602, 31.2569], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(picker);
+
+    const latInput = document.getElementById('lat');
+    const lonInput = document.getElementById('lon');
+    const searchInput = document.getElementById('geo-search');
+    const resultsBox = document.getElementById('geo-results');
+    const statusBox = document.getElementById('geo-status');
     let marker;
-    function place(lat, lng) {
-        document.getElementById('lat').value = (+lat).toFixed(5);
-        document.getElementById('lon').value = (+lng).toFixed(5);
-        if (marker) picker.removeLayer(marker);
-        marker = L.marker([lat, lng]).addTo(picker);
+
+    function place(lat, lng, zoom) {
+        latInput.value = (+lat).toFixed(5);
+        lonInput.value = (+lng).toFixed(5);
+        if (marker) {
+            marker.setLatLng([lat, lng]);
+        } else {
+            marker = L.marker([lat, lng], { draggable: true }).addTo(picker);
+            marker.on('dragend', e => {
+                const p = e.target.getLatLng();
+                place(p.lat, p.lng);
+            });
+        }
+        picker.setView([lat, lng], zoom || picker.getZoom());
     }
+
+    // Click the map to drop / move the pin.
     picker.on('click', e => place(e.latlng.lat, e.latlng.lng));
+
+    // --- Address search via OpenStreetMap Nominatim (no API key) ---
+    function clearResults() {
+        resultsBox.innerHTML = '';
+        resultsBox.classList.add('d-none');
+    }
+
+    async function runSearch() {
+        const q = searchInput.value.trim();
+        if (!q) return;
+        clearResults();
+        statusBox.textContent = 'Searching…';
+        try {
+            const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=1&q='
+                + encodeURIComponent(q);
+            const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+            const items = await resp.json();
+            statusBox.textContent = '';
+            if (!items.length) {
+                statusBox.textContent = 'No matches found. Try a nearby landmark, or click the map.';
+                return;
+            }
+            items.forEach(it => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action';
+                li.style.cursor = 'pointer';
+                li.textContent = it.display_name;
+                li.addEventListener('click', () => {
+                    place(parseFloat(it.lat), parseFloat(it.lon), 16);
+                    searchInput.value = it.display_name;
+                    clearResults();
+                });
+                resultsBox.appendChild(li);
+            });
+            resultsBox.classList.remove('d-none');
+        } catch (err) {
+            statusBox.textContent = 'Address search is unavailable right now. Please click the map instead.';
+        }
+    }
+
+    document.getElementById('geo-search-btn').addEventListener('click', runSearch);
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+    });
+
+    // --- Use my current location ---
+    document.getElementById('geo-locate').addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            statusBox.textContent = 'Your browser does not support location access.';
+            return;
+        }
+        statusBox.textContent = 'Locating…';
+        navigator.geolocation.getCurrentPosition(
+            pos => { statusBox.textContent = ''; place(pos.coords.latitude, pos.coords.longitude, 16); },
+            () => { statusBox.textContent = 'Could not get your location. Please search or click the map.'; }
+        );
+    });
+
     setTimeout(() => picker.invalidateSize(), 200);
 </script>
 {% endblock %}

@@ -243,12 +243,33 @@ def _time_factor(hour: float) -> float:
     return min(1.0, 0.22 + 0.85 * max(morning, evening))
 
 
+# Relative traffic per weekday (Mon=0 .. Sun=6). Cairo's working week runs
+# Sunday–Thursday, so Friday is the quietest day and Saturday is light; the
+# mid-week days carry the heaviest commuter load. Picking a calmer day/time is
+# exactly what lets a dispatcher schedule a courier for the fastest run.
+_DAY_FACTOR = {
+    0: 1.00,  # Monday
+    1: 1.00,  # Tuesday
+    2: 1.00,  # Wednesday
+    3: 0.97,  # Thursday (pre-weekend wind-down)
+    4: 0.68,  # Friday  (weekend — lightest)
+    5: 0.82,  # Saturday (weekend)
+    6: 0.98,  # Sunday  (work day)
+}
+
+
+def _day_factor(weekday: int) -> float:
+    """Traffic multiplier for a weekday (``datetime.weekday()``: Mon=0 .. Sun=6)."""
+    return _DAY_FACTOR.get(weekday % 7, 1.0)
+
+
 def congestion_for(lat, lon, when=None) -> str:
-    """Deterministic, time-aware congestion level for a location."""
+    """Deterministic, time-of-day- and day-of-week-aware congestion level."""
     when = when or datetime.now()
     key = f"{round(lat, 3)}:{round(lon, 3)}"
     road = (int(hashlib.sha1(key.encode()).hexdigest(), 16) % 1000) / 1000.0
-    score = 0.55 * _time_factor(when.hour + when.minute / 60.0) + 0.45 * road
+    tod = _time_factor(when.hour + when.minute / 60.0) * _day_factor(when.weekday())
+    score = 0.55 * tod + 0.45 * road
     if score < 0.40:
         return FREE
     if score < 0.62:
@@ -256,6 +277,17 @@ def congestion_for(lat, lon, when=None) -> str:
     if score < 0.80:
         return HEAVY
     return SEVERE
+
+
+def traffic_factor_at(lat, lon, when=None) -> float:
+    """Travel-time multiplier (>= 1.0) for a point at a given moment.
+
+    Wraps :func:`congestion_for` and maps the resulting level onto its
+    slow-down factor, so the optimiser can turn a planned dispatch *time* into a
+    realistic ETA (rush hour stretches the same distance; a quiet Friday morning
+    shrinks it).
+    """
+    return LEVEL_FACTOR[congestion_for(lat, lon, when)]
 
 
 def build_overlay(points, closures=None, when=None):

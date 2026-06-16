@@ -4,29 +4,121 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-map"></i> Live Map &amp; Route Optimisation</h3>
-    <div class="d-flex gap-2">
-        <a href="{{ url_for('admin.closures') }}" class="btn btn-outline-danger">
-            <i class="bi bi-cone-striped"></i> Closures{% if closures %} ({{ closures|length }}){% endif %}
-        </a>
-        <form action="{{ url_for('admin.optimize') }}" method="POST" class="d-flex gap-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-accent">
-                <i class="bi bi-stars"></i> Optimise all hubs
-            </button>
-        </form>
+    <a href="{{ url_for('admin.closures') }}" class="btn btn-outline-danger">
+        <i class="bi bi-cone-striped"></i> Closures{% if closures %} ({{ closures|length }}){% endif %}
+    </a>
+</div>
+
+{# ---- Dispatch planning: choose the day/time + technique ---- #}
+<div class="card card-soft p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+        <i class="bi bi-calendar-week text-primary-dark"></i>
+        <h6 class="fw-bold mb-0">Plan the dispatch</h6>
+        <span class="text-muted small">Choose when the courier leaves and which technique to use, then preview or dispatch.</span>
     </div>
+    <form id="planForm" method="GET" action="{{ url_for('admin.live_map') }}" class="row g-2 align-items-end">
+        <div class="col-6 col-md-auto">
+            <label class="form-label small mb-1 text-muted">Dispatch day</label>
+            <select name="day" class="form-select form-select-sm">
+                <option value="today" {% if departure_day in ('today', '') %}selected{% endif %}>Today</option>
+                {% for name in weekday_labels %}
+                <option value="{{ name }}" {% if departure_day == name %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-auto">
+            <label class="form-label small mb-1 text-muted">Time of day</label>
+            <select name="time" class="form-select form-select-sm">
+                {% for value, lbl in time_presets %}
+                <option value="{{ value }}" {% if departure_time == value %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-auto">
+            <label class="form-label small mb-1 text-muted">Technique</label>
+            <select name="strategy" class="form-select form-select-sm">
+                <option value="auto" {% if selected_strategy in ('auto', '') %}selected{% endif %}>Auto &middot; recommended</option>
+                {% for key in strategy_order %}
+                <option value="{{ key }}" {% if selected_strategy == key %}selected{% endif %}>{{ strategies[key].label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i> Preview</button>
+        </div>
+        <div class="col-auto">
+            <button type="button" id="dispatchBtn" class="btn btn-accent btn-sm">
+                <i class="bi bi-stars"></i> Optimise &amp; dispatch
+            </button>
+        </div>
+    </form>
+</div>
+
+{# Hidden POST form so "Optimise & dispatch" persists with the previewed plan. #}
+<form id="dispatchForm" method="POST" action="{{ url_for('admin.optimize') }}" class="d-none">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="day" value="{{ departure_day }}">
+    <input type="hidden" name="time" value="{{ departure_time }}">
+    <input type="hidden" name="strategy" value="{{ selected_strategy }}">
+</form>
+
+{# ---- Technique comparison for the chosen day & time ---- #}
+<div class="card card-soft p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart-steps"></i> Route techniques compared</h6>
+        <span class="small text-muted">Planned dispatch: <strong>{{ departure_label }}</strong>
+            &middot; {{ comparison.stops }} stop(s) &middot; {{ comparison.couriers }} courier(s)</span>
+    </div>
+    {% if comparison.results and comparison.stops %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead class="small text-muted">
+                <tr>
+                    <th>Technique</th>
+                    <th class="text-end">Est. completion</th>
+                    <th class="text-end">Total distance</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in comparison.results %}
+                <tr class="{% if r.recommended %}table-success{% endif %}">
+                    <td>
+                        <span class="fw-semibold">{{ r.label }}</span>
+                        <div class="text-muted small">{{ r.blurb }}</div>
+                    </td>
+                    <td class="text-end fw-semibold">{{ r.duration_min }} min</td>
+                    <td class="text-end">{{ r.distance_km }} km</td>
+                    <td class="text-end">
+                        {% if r.recommended %}<span class="badge bg-success"><i class="bi bi-check-lg"></i> Recommended</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="text-muted small mt-2">
+        <i class="bi bi-info-circle"></i> &ldquo;Est. completion&rdquo; is the time until the last parcel is delivered
+        (couriers run in parallel), using simulated traffic for the selected day &amp; time. Leave the technique on
+        <strong>Auto</strong> to dispatch with the recommended one.
+    </div>
+    {% else %}
+    <div class="alert alert-light border mb-0 small">
+        No parcels are waiting at a hub. Mark parcels <strong>At Warehouse</strong> (and add a courier) to compare techniques.
+    </div>
+    {% endif %}
 </div>
 
 {% set ns = namespace(blocked=false) %}
 {% for cid, stops in routes.items() %}{% for st in stops %}{% if st.blocked %}{% set ns.blocked = true %}{% endif %}{% endfor %}{% endfor %}
 {% if ns.blocked %}
 <div class="alert alert-danger small py-2"><i class="bi bi-exclamation-triangle-fill"></i>
-    One or more routes still pass through a <strong>road closure</strong>. Click <strong>Optimise all hubs</strong> to re-route around it.</div>
+    One or more routes still pass through a <strong>road closure</strong>. Click <strong>Optimise &amp; dispatch</strong> to re-route around it.</div>
 {% endif %}
 
 <div class="card card-soft p-3 mb-3">
     {% include "partials/_traffic_legend.html" %}
-    <div class="text-muted small mt-1">Route lines follow real streets (OSRM) and are coloured by simulated, time-of-day traffic. Re-optimise to refresh.</div>
+    <div class="text-muted small mt-1">Route lines follow real streets (OSRM); colours show simulated traffic for <strong>{{ departure_label }}</strong>. Change the plan above to compare other times.</div>
 </div>
 
 <div class="card card-soft mb-3">
@@ -101,6 +193,21 @@
     {% endfor %}
 
     if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+</script>
+<script>
+    // "Optimise & dispatch" submits the currently-selected plan via POST.
+    (function () {
+        const btn = document.getElementById('dispatchBtn');
+        const plan = document.getElementById('planForm');
+        const post = document.getElementById('dispatchForm');
+        if (!btn || !plan || !post) return;
+        btn.addEventListener('click', function () {
+            ['day', 'time', 'strategy'].forEach(function (n) {
+                post.querySelector('[name="' + n + '"]').value = plan.querySelector('[name="' + n + '"]').value;
+            });
+            post.submit();
+        });
+    })();
 </script>
 <style>.seq-badge { background: #0d3b66; border: none; box-shadow: none; color: #fff; font-weight: 700; font-size: 11px; border-radius: 10px; padding: 0 6px; }
 .seq-badge::before { display: none; }</style>

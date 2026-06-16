@@ -14,10 +14,49 @@ from ...models import (
 from ...utils import role_required
 from ...routing import (
     optimize_and_persist, build_overlay, active_closure_dicts,
-    LEVEL_COLORS, LEVEL_LABELS,
+    compare_strategies, resolve_departure, STRATEGIES, STRATEGY_ORDER,
+    WEEKDAY_LABELS, LEVEL_COLORS, LEVEL_LABELS,
 )
 
 admin_only = role_required(Role.ADMIN)
+
+# Quick-pick departure times for dispatch planning (form value -> menu label).
+TIME_PRESETS = [
+    ("", "Now"),
+    ("06:00", "06:00 · Early"),
+    ("09:00", "09:00 · Morning rush"),
+    ("13:00", "13:00 · Midday"),
+    ("16:00", "16:00 · Afternoon"),
+    ("18:00", "18:00 · Evening rush"),
+    ("21:00", "21:00 · Night"),
+]
+
+
+def _planning_inputs():
+    """Read the dispatch-planning controls (day / time / technique).
+
+    Works for both the GET map (query string) and the POST optimise form, so a
+    previewed plan and the dispatched plan stay in sync. Returns
+    ``(departure, day, time_raw, strategy, label)``.
+    """
+    day = (request.values.get("day") or "today").strip()
+    time_raw = (request.values.get("time") or "").strip()
+    strategy = (request.values.get("strategy") or "auto").strip()
+
+    hour = minute = None
+    if ":" in time_raw:
+        hh, _, mm = time_raw.partition(":")
+        if hh.isdigit() and mm.isdigit():
+            hour, minute = int(hh), int(mm)
+    elif time_raw.isdigit():
+        hour, minute = int(time_raw), 0
+
+    departure = resolve_departure(day=day, hour=hour, minute=(minute or 0))
+    if time_raw == "":
+        label = "now (" + departure.strftime("%a %H:%M") + ")"
+    else:
+        label = departure.strftime("%A %H:%M")
+    return departure, day, time_raw, strategy, label
 
 
 # --------------------------------------------------------------------------- #
@@ -86,6 +125,8 @@ def dashboard():
 @login_required
 @admin_only
 def live_map():
+    departure, day, time_raw, strategy, departure_label = _planning_inputs()
+
     hubs = Hub.query.all()
     shipments = Shipment.query.filter(
         Shipment.status.in_([
@@ -98,7 +139,8 @@ def live_map():
     routes = {}
     for st in stops:
         points = json.loads(st.path_json) if st.path_json else []
-        overlay = build_overlay(points, closures)
+        # Colour the map for the planned dispatch time, not just "now".
+        overlay = build_overlay(points, closures, when=departure)
         routes.setdefault(st.courier_id, []).append({
             "sequence": st.sequence,
             "segments": overlay["segments"],
@@ -109,10 +151,17 @@ def live_map():
         })
     courier_names = {c.id: c.name for c in User.query.filter_by(role=Role.COURIER).all()}
 
+    # Compare every optimisation technique for the chosen dispatch day & time.
+    comparison = compare_strategies(departure=departure)
+
     return render_template(
         "admin/map.html",
         hubs=hubs, shipments=shipments, routes=routes, courier_names=courier_names,
         closures=closures, level_colors=LEVEL_COLORS, level_labels=LEVEL_LABELS,
+        comparison=comparison, departure_label=departure_label,
+        departure_day=day, departure_time=time_raw, selected_strategy=strategy,
+        strategies=STRATEGIES, strategy_order=STRATEGY_ORDER,
+        weekday_labels=WEEKDAY_LABELS, time_presets=TIME_PRESETS,
     )
 
 
@@ -122,16 +171,18 @@ def live_map():
 def optimize():
     hub_id = request.form.get("hub_id", type=int)
     hub = db.session.get(Hub, hub_id) if hub_id else None
-    summary = optimize_and_persist(hub)
+    departure, day, time_raw, strategy, departure_label = _planning_inputs()
+    summary = optimize_and_persist(hub, departure=departure, strategy=strategy)
     if summary["assigned"]:
         flash(
-            f"Optimised {len(summary['routes'])} route(s): {summary['assigned']} stops, "
+            f"Optimised with {summary['strategy_label']} for {departure_label}: "
+            f"{len(summary['routes'])} route(s) · {summary['assigned']} stops · "
             f"{summary['total_distance_km']} km total.",
             "success",
         )
     else:
         flash("Nothing to optimise. Make sure parcels are marked 'At Warehouse' and couriers exist.", "info")
-    return redirect(url_for("admin.live_map"))
+    return redirect(url_for("admin.live_map", day=day, time=time_raw, strategy=strategy))
 
 
 # --------------------------------------------------------------------------- #
