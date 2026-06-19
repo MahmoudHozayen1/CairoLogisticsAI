@@ -23,11 +23,12 @@ class LoginForm(FlaskForm):
 
 
 class RegisterForm(FlaskForm):
-    # Public self-service signup is limited to merchants and couriers; admin
-    # accounts are provisioned via the CLI / seed script for security.
+    # Public self-service signup roles. NOTE: exposing ADMIN here lets anyone
+    # self-provision full admin access — keep this behind a trusted environment.
     ROLE_CHOICES = [
         (Role.MERCHANT, "Merchant"),
         (Role.COURIER, "Courier"),
+        (Role.ADMIN, "Admin"),
     ]
 
     name = StringField("Full name", validators=[DataRequired(), Length(2, 120)])

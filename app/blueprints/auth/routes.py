@@ -33,10 +33,10 @@ def login():
 
 @bp.route("/register", methods=["GET", "POST"])
 def register():
-    """Public self-service registration for merchants and couriers.
+    """Public self-service registration for merchants, couriers and admins.
 
-    Admins are created by the ``flask create-admin`` CLI command or the seed
-    script; new couriers are unassigned until an admin gives them a hub.
+    WARNING: admin self-registration grants full administrative access to anyone
+    who can reach this page. The seed script still provisions the first admin.
     """
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
@@ -49,7 +49,7 @@ def register():
         if User.query.filter_by(email=email).first():
             flash("An account with that email already exists.", "warning")
         else:
-            role = form.role.data if form.role.data in (Role.MERCHANT, Role.COURIER) else Role.MERCHANT
+            role = form.role.data if form.role.data in Role.ALL else Role.MERCHANT
             user = User(
                 name=form.name.data.strip(),
                 email=email,
@@ -58,12 +58,15 @@ def register():
             )
             if role == Role.MERCHANT:
                 user.business_name = form.business_name.data or None
-            else:
+            elif role == Role.COURIER:
                 user.vehicle_type = form.vehicle_type.data or "Motorcycle"
             user.set_password(form.password.data)
             db.session.add(user)
             db.session.commit()
             login_user(user)
+            if role == Role.ADMIN:
+                flash("Your admin account is ready.", "success")
+                return redirect(url_for("admin.dashboard"))
             if role == Role.COURIER:
                 flash("Your courier account is ready. An admin will assign your hub.", "success")
                 return redirect(url_for("courier.dashboard"))
