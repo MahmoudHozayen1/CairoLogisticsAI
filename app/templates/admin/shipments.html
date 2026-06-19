@@ -4,24 +4,63 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-box-seam"></i> All Shipments</h3>
-    <form class="d-flex gap-2" method="GET">
-        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">All statuses</option>
-            {% for key, label in ShipmentStatus.LABELS.items() %}
-            <option value="{{ key }}" {{ 'selected' if current_status == key }}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </form>
+    <a href="{{ url_for('admin.create_shipment') }}" class="btn btn-accent">
+        <i class="bi bi-plus-circle"></i> New shipment
+    </a>
 </div>
+
+<form class="card card-soft p-3 mb-3" method="GET">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-md">
+            <label class="form-label small mb-1 text-muted">Search</label>
+            <input type="text" name="q" value="{{ search_q or '' }}" class="form-control form-control-sm"
+                   placeholder="Tracking number, receiver name or phone">
+        </div>
+        <div class="col-6 col-md-auto">
+            <label class="form-label small mb-1 text-muted">Merchant</label>
+            <select name="merchant_id" class="form-select form-select-sm">
+                <option value="">All merchants</option>
+                {% for m in merchants %}
+                <option value="{{ m.id }}" {{ 'selected' if current_merchant == m.id }}>{{ m.display_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-auto">
+            <label class="form-label small mb-1 text-muted">Zone / District</label>
+            <select name="district" class="form-select form-select-sm">
+                <option value="">All zones</option>
+                {% for d in districts %}
+                <option value="{{ d }}" {{ 'selected' if current_district == d }}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-auto">
+            <label class="form-label small mb-1 text-muted">Status</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All statuses</option>
+                {% for key, label in ShipmentStatus.LABELS.items() %}
+                <option value="{{ key }}" {{ 'selected' if current_status == key }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-auto">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-funnel"></i> Filter</button>
+        </div>
+        <div class="col-12 col-md-auto">
+            <a href="{{ url_for('admin.shipments') }}" class="btn btn-outline-secondary btn-sm w-100">Reset</a>
+        </div>
+    </div>
+</form>
 
 <div class="card card-soft p-3">
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead><tr><th>Tracking</th><th>Receiver</th><th>District</th><th>Courier</th><th>COD</th><th>Status</th><th>Created</th></tr></thead>
+            <thead><tr><th>Tracking</th><th>Merchant</th><th>Receiver</th><th>Zone</th><th>Courier</th><th>COD</th><th>Status</th><th>Created</th></tr></thead>
             <tbody>
             {% for s in shipments %}
                 <tr style="cursor:pointer" onclick="location.href='{{ url_for('admin.shipment_detail', shipment_id=s.id) }}'">
                     <td class="tracking-code">{{ s.tracking_number }}</td>
+                    <td>{{ s.merchant.display_name if s.merchant else '—' }}</td>
                     <td>{{ s.receiver_name }}<div class="small text-muted">{{ s.receiver_phone }}</div></td>
                     <td>{{ s.district or '—' }}</td>
                     <td>{{ s.courier.name if s.courier else '—' }}</td>
@@ -30,7 +69,7 @@
                     <td class="small text-muted">{{ s.created_at.strftime('%d %b %H:%M') if s.created_at }}</td>
                 </tr>
             {% else %}
-                <tr><td colspan="7" class="text-muted">No shipments found.</td></tr>
+                <tr><td colspan="8" class="text-muted">No shipments found.</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -43,7 +82,7 @@
         {% for p in pagination.iter_pages() %}
             {% if p %}
                 <li class="page-item {{ 'active' if p == pagination.page }}">
-                    <a class="page-link" href="{{ url_for('admin.shipments', page=p, status=current_status) }}">{{ p }}</a>
+                    <a class="page-link" href="{{ url_for('admin.shipments', page=p, status=current_status, merchant_id=current_merchant, district=current_district, q=search_q) }}">{{ p }}</a>
                 </li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">…</span></li>

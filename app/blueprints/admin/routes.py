@@ -7,15 +7,15 @@ from sqlalchemy import func
 
 from . import bp
 from ...extensions import db
-from ...forms import HubForm, CourierForm, RoadClosureForm
+from ...forms import HubForm, CourierForm, RoadClosureForm, AdminShipmentForm
 from ...models import (
     User, Hub, Shipment, RouteStop, RoadClosure, ShipmentStatus, Role,
 )
-from ...utils import role_required
+from ...utils import role_required, generate_tracking_number
 from ...routing import (
     optimize_and_persist, build_overlay, active_closure_dicts,
     compare_strategies, resolve_departure, STRATEGIES, STRATEGY_ORDER,
-    WEEKDAY_LABELS, LEVEL_COLORS, LEVEL_LABELS,
+    WEEKDAY_LABELS, LEVEL_COLORS, LEVEL_LABELS, haversine_km,
 )
 
 admin_only = role_required(Role.ADMIN)
@@ -100,8 +100,13 @@ def dashboard():
     daily_labels, daily_data = [], []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
+        # Compare against a [start, next-day) range instead of func.date(...) == str:
+        # the latter throws on PostgreSQL ("operator does not exist: date = text")
+        # while a range comparison is portable across SQLite and Postgres.
+        day_start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
         count = Shipment.query.filter(
-            func.date(Shipment.created_at) == day.isoformat()
+            Shipment.created_at >= day_start,
+            Shipment.created_at < day_start + timedelta(days=1),
         ).count()
         daily_labels.append(day.strftime("%a"))
         daily_data.append(count)
@@ -174,12 +179,17 @@ def optimize():
     departure, day, time_raw, strategy, departure_label = _planning_inputs()
     summary = optimize_and_persist(hub, departure=departure, strategy=strategy)
     if summary["assigned"]:
-        flash(
+        msg = (
             f"Optimised with {summary['strategy_label']} for {departure_label}: "
             f"{len(summary['routes'])} route(s) · {summary['assigned']} stops · "
-            f"{summary['total_distance_km']} km total.",
-            "success",
+            f"{summary['total_distance_km']} km total."
         )
+        if summary.get("unassigned"):
+            msg += (
+                f" {summary['unassigned']} parcel(s) left unassigned — the fleet is at "
+                f"capacity. Add couriers or a larger vehicle, then re-optimise."
+            )
+        flash(msg, "success")
     else:
         flash("Nothing to optimise. Make sure parcels are marked 'At Warehouse' and couriers exist.", "info")
     return redirect(url_for("admin.live_map", day=day, time=time_raw, strategy=strategy))
@@ -367,16 +377,103 @@ def delete_closure(closure_id):
 @login_required
 @admin_only
 def shipments():
-    status = request.args.get("status")
+    status = request.args.get("status") or ""
+    merchant_id = request.args.get("merchant_id", type=int)
+    district = request.args.get("district") or ""
+    q = (request.args.get("q") or "").strip()
+
     query = Shipment.query
     if status:
         query = query.filter_by(status=status)
+    if merchant_id:
+        query = query.filter_by(merchant_id=merchant_id)
+    if district:
+        query = query.filter(Shipment.district == district)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(
+            Shipment.tracking_number.ilike(like),
+            Shipment.receiver_name.ilike(like),
+            Shipment.receiver_phone.ilike(like),
+        ))
+
     page = request.args.get("page", 1, type=int)
     pagination = query.order_by(Shipment.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+
+    # Filter options.
+    merchants = User.query.filter_by(role=Role.MERCHANT).order_by(User.name).all()
+    districts = [
+        d[0] for d in db.session.query(Shipment.district)
+        .filter(Shipment.district.isnot(None), Shipment.district != "")
+        .distinct().order_by(Shipment.district).all()
+    ]
     return render_template(
         "admin/shipments.html",
         pagination=pagination, shipments=pagination.items, current_status=status,
+        merchants=merchants, districts=districts,
+        current_merchant=merchant_id, current_district=district, search_q=q,
     )
+
+
+@bp.route("/shipments/new", methods=["GET", "POST"])
+@login_required
+@admin_only
+def create_shipment():
+    form = AdminShipmentForm()
+    merchants = User.query.filter_by(role=Role.MERCHANT).order_by(User.name).all()
+    hubs = Hub.query.order_by(Hub.name).all()
+    form.merchant_id.choices = [(m.id, m.display_name) for m in merchants]
+    form.hub_id.choices = [(0, "Auto-assign nearest hub")] + [(h.id, h.name) for h in hubs]
+
+    if not merchants:
+        flash("Create a merchant account first — a shipment must belong to a merchant.", "warning")
+        return redirect(url_for("admin.shipments"))
+
+    if form.validate_on_submit():
+        merchant = db.session.get(User, form.merchant_id.data)
+        coords = [form.lat.data, form.lon.data]
+        hub_id = form.hub_id.data or _nearest_hub_id(coords)
+
+        shipment = Shipment(
+            tracking_number=_unique_tracking_number(),
+            merchant_id=merchant.id,
+            hub_id=hub_id,
+            sender_name=merchant.display_name,
+            sender_phone=merchant.phone,
+            receiver_name=form.receiver_name.data,
+            receiver_phone=form.receiver_phone.data,
+            district=form.district.data,
+            address=form.address.data,
+            landmark=form.landmark.data,
+            lat=form.lat.data,
+            lon=form.lon.data,
+            package_description=form.package_description.data,
+            weight_kg=form.weight_kg.data or 1.0,
+            cod_amount=form.cod_amount.data or 0.0,
+            status=ShipmentStatus.PENDING,
+        )
+        shipment.add_event(ShipmentStatus.PENDING, note="Shipment created by admin", user=current_user)
+        db.session.add(shipment)
+        db.session.commit()
+        flash(f"Shipment created for {merchant.display_name}. Tracking: {shipment.tracking_number}", "success")
+        return redirect(url_for("admin.shipment_detail", shipment_id=shipment.id))
+
+    return render_template("admin/create_shipment.html", form=form, hubs=hubs)
+
+
+def _unique_tracking_number():
+    for _ in range(10):
+        tn = generate_tracking_number()
+        if not Shipment.query.filter_by(tracking_number=tn).first():
+            return tn
+    return generate_tracking_number()
+
+
+def _nearest_hub_id(coords):
+    hubs = Hub.query.all()
+    if not hubs:
+        return None
+    return min(hubs, key=lambda h: haversine_km(coords, h.coords)).id
 
 
 @bp.route("/shipments/<int:shipment_id>")

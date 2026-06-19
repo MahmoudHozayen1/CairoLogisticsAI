@@ -33,6 +33,39 @@ class Role:
     ALL = (ADMIN, COURIER, MERCHANT)
 
 
+class Vehicle:
+    """Courier vehicle types and how many parcels each can carry per route.
+
+    Capacity caps are enforced by the route optimiser: a courier is never
+    assigned more stops than their vehicle can hold, and parcels beyond the total
+    fleet capacity are left unassigned (rather than silently overloading a bike).
+    """
+    MOTORCYCLE = "Motorcycle"
+    CAR = "Car"
+    VAN = "Van"
+    BICYCLE = "Bicycle"
+
+    CAPACITY = {
+        BICYCLE: 3,
+        MOTORCYCLE: 5,
+        CAR: 10,
+        VAN: 15,
+    }
+    DEFAULT_CAPACITY = 5
+
+    # (value, label) pairs for select inputs, in ascending-capacity order.
+    CHOICES = [
+        (BICYCLE, f"Bicycle (max {CAPACITY[BICYCLE]})"),
+        (MOTORCYCLE, f"Motorcycle (max {CAPACITY[MOTORCYCLE]})"),
+        (CAR, f"Car (max {CAPACITY[CAR]})"),
+        (VAN, f"Van (max {CAPACITY[VAN]})"),
+    ]
+
+    @classmethod
+    def capacity(cls, vehicle_type) -> int:
+        return cls.CAPACITY.get((vehicle_type or "").strip(), cls.DEFAULT_CAPACITY)
+
+
 class ShipmentStatus:
     """Lifecycle of a parcel, modelled on Bosta/DHL milestones."""
     PENDING = "pending"            # created, awaiting pickup from merchant
@@ -132,6 +165,11 @@ class User(UserMixin, db.Model):
         if self.is_merchant and self.business_name:
             return self.business_name
         return self.name
+
+    @property
+    def route_capacity(self):
+        """Maximum parcels this courier can carry on one route (by vehicle)."""
+        return Vehicle.capacity(self.vehicle_type)
 
     def __repr__(self):
         return f"<User {self.email} ({self.role})>"

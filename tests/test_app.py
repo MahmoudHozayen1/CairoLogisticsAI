@@ -289,6 +289,9 @@ def test_strategy_comparison_recommends(app):
     with app.app_context():
         hub = Hub.query.first()
         merchant = User.query.filter_by(role=Role.MERCHANT).first()
+        # Give the courier a high-capacity vehicle so capacity isn't the variable
+        # under test here (a Van holds 15; we add 8 parcels).
+        User.query.filter_by(role=Role.COURIER).first().vehicle_type = "Van"
         # A deliberately scrambled set of drop-offs so FIFO is a poor order.
         offsets = [
             (0.010, 0.010), (-0.008, 0.006), (0.009, -0.007), (-0.006, -0.009),
@@ -322,6 +325,8 @@ def test_optimize_with_strategy_and_departure(app):
     with app.app_context():
         hub = Hub.query.first()
         merchant = User.query.filter_by(role=Role.MERCHANT).first()
+        # Van capacity (15) comfortably holds the 6 parcels below.
+        User.query.filter_by(role=Role.COURIER).first().vehicle_type = "Van"
         for i in range(6):
             db.session.add(Shipment(
                 tracking_number=generate_tracking_number(),
@@ -339,3 +344,90 @@ def test_optimize_with_strategy_and_departure(app):
         etas = [rs.eta_minutes for rs in RouteStop.query.order_by(RouteStop.sequence).all()]
         assert etas == sorted(etas)         # ETAs accumulate along the route
         assert etas[-1] > 0
+
+
+def test_vehicle_capacity_caps_assignment(app):
+    """A courier is never assigned more parcels than their vehicle can carry."""
+    from app.routing import optimize_and_persist
+    from app.models import Vehicle
+    from datetime import datetime
+
+    with app.app_context():
+        hub = Hub.query.first()
+        merchant = User.query.filter_by(role=Role.MERCHANT).first()
+        courier = User.query.filter_by(role=Role.COURIER).first()
+        courier.vehicle_type = Vehicle.MOTORCYCLE          # capacity 5
+        # 8 parcels, one motorcycle -> 5 assigned, 3 left for next round.
+        for i in range(8):
+            db.session.add(Shipment(
+                tracking_number=generate_tracking_number(),
+                merchant_id=merchant.id, hub_id=hub.id,
+                sender_name="Shop", receiver_name=f"R{i}", receiver_phone="010",
+                lat=29.96 + i * 0.001, lon=31.25 + i * 0.001,
+                status=ShipmentStatus.AT_WAREHOUSE,
+            ))
+        db.session.commit()
+
+        summary = optimize_and_persist(departure=datetime(2026, 1, 6, 11, 0))
+        assert summary["assigned"] == Vehicle.CAPACITY[Vehicle.MOTORCYCLE]   # 5
+        assert summary["unassigned"] == 3
+        # No single courier route exceeds the vehicle capacity.
+        for route in summary["routes"]:
+            assert len(route["stops"]) <= Vehicle.CAPACITY[Vehicle.MOTORCYCLE]
+
+
+# --------------------------------------------------------------------------- #
+#  Admin: create shipment + filter the shipments table
+# --------------------------------------------------------------------------- #
+def test_admin_can_create_shipment(client, app):
+    login(client, "admin@test.io", "admin12345")
+    with app.app_context():
+        merchant = User.query.filter_by(role=Role.MERCHANT).first()
+        mid = merchant.id
+
+    r = client.post("/admin/shipments/new", data={
+        "merchant_id": mid, "receiver_name": "Admin Receiver", "receiver_phone": "0123456789",
+        "district": "Maadi", "address": "Road 9", "landmark": "Pharmacy",
+        "lat": 29.962, "lon": 31.259, "package_description": "Box",
+        "weight_kg": 1, "cod_amount": 50, "hub_id": 0,
+    }, follow_redirects=True)
+    assert r.status_code == 200
+    with app.app_context():
+        s = Shipment.query.filter_by(receiver_name="Admin Receiver").first()
+        assert s is not None
+        assert s.merchant_id == mid
+        assert s.hub_id is not None          # auto-assigned nearest hub
+        assert s.status == ShipmentStatus.PENDING
+
+
+def test_admin_shipments_filter_by_merchant_and_zone(client, app):
+    login(client, "admin@test.io", "admin12345")
+    with app.app_context():
+        hub = Hub.query.first()
+        m1 = User.query.filter_by(role=Role.MERCHANT).first()
+        m2 = User(name="Other", email="other@test.io", role=Role.MERCHANT, business_name="Other Co")
+        m2.set_password("merchant123")
+        db.session.add(m2)
+        db.session.flush()
+        db.session.add(Shipment(
+            tracking_number=generate_tracking_number(), merchant_id=m1.id, hub_id=hub.id,
+            sender_name="A", receiver_name="Zamalek Person", receiver_phone="011",
+            district="Zamalek", lat=29.96, lon=31.22, status=ShipmentStatus.PENDING,
+        ))
+        db.session.add(Shipment(
+            tracking_number=generate_tracking_number(), merchant_id=m2.id, hub_id=hub.id,
+            sender_name="B", receiver_name="Maadi Person", receiver_phone="012",
+            district="Maadi", lat=29.96, lon=31.25, status=ShipmentStatus.PENDING,
+        ))
+        db.session.commit()
+        m1_id, m2_id = m1.id, m2.id
+
+    # Filter by merchant 2 -> only their parcel.
+    r = client.get(f"/admin/shipments?merchant_id={m2_id}")
+    assert b"Maadi Person" in r.data and b"Zamalek Person" not in r.data
+    # Filter by zone -> only that district.
+    r = client.get("/admin/shipments?district=Zamalek")
+    assert b"Zamalek Person" in r.data and b"Maadi Person" not in r.data
+    # Search by receiver name.
+    r = client.get("/admin/shipments?q=Maadi+Person")
+    assert b"Maadi Person" in r.data and b"Zamalek Person" not in r.data

@@ -171,6 +171,37 @@ working unchanged; "now" and the previous default technique remain the defaults.
 
 ---
 
+## 3d. Vehicle capacity & admin shipment operations
+
+**The problem.** The optimiser happily assigned *every* parcel in a courier's cluster to that one
+courier — a bicycle could be told to deliver 30 boxes. There was also no way for an **admin** to
+create a shipment on a merchant's behalf (phone orders, walk-ins), and the admin shipment table
+listed thousands of parcels with no way to find a specific merchant's or zone's orders.
+
+**What we changed.**
+
+1. **Per-vehicle capacity caps.** A `Vehicle` registry defines how many parcels each vehicle type
+   can carry on one route — **Bicycle 3, Motorcycle 5, Car 10, Van 15** — exposed as
+   `courier.route_capacity`. The optimiser now does **capacity-aware assignment**: k-means still
+   gives each courier a coherent zone, then a greedy pass fills each courier up to their cap, spilling
+   to the next-nearest courier when one is full. Parcels beyond the *whole fleet's* capacity are left
+   **unassigned** for the next dispatch round (and the admin is told), rather than silently
+   overloading a vehicle.
+
+2. **Admin-created shipments.** Admins get the same map/search/pin picker the merchant uses, plus a
+   **merchant selector** (a shipment must belong to a merchant). Implemented as an `AdminShipmentForm`
+   subclass so the two forms never drift apart.
+
+3. **Find-by-merchant / zone / search.** The admin shipments table gained a **Merchant** column and a
+   filter bar: free-text search (tracking number, receiver name or phone) plus dropdowns for merchant,
+   zone/district and status. Filters compose and survive pagination.
+
+**A decision worth calling out — biggest vehicles pick first.** When assigning clusters to couriers we
+sort couriers by descending capacity so dense zones land on high-capacity vehicles. This minimises the
+number of parcels that overflow the fleet, which is the figure a dispatcher actually cares about.
+
+---
+
 ## 4. Modelling the shipment lifecycle
 
 **The problem.** A parcel is not just a row with a "status" field — customers expect a Bosta/DHL
@@ -268,6 +299,8 @@ again. Several were "works on my machine" traps where tests passed but the runni
 | **Tests passed yet demo logins failed** | Tests used a valid TLD (`@test.io`) while the seed data used `.test` | Keep seed + test domains consistent; added a regression test asserting a demo email yields a `302`, not a 200 re-render |
 | Leaflet map threw **"Identifier 'path' has already been declared"** | `const path` was emitted twice in one JS scope inside a Jinja `{% for %}` loop | Block-scope each loop iteration with `{ … }` so every `const` is fresh |
 | Automated screenshots **lost auth / used the wrong viewport** | VS Code's built-in browser CDP doesn't persist cookies (`Storage.getCookies` missing) and `setViewportSize` doesn't stick across navigations | Capture with **standalone Playwright** (`chromium.launch()` + `new_context(viewport=…)`) |
+| Admin **dashboard 500'd on PostgreSQL** (worked on local SQLite) | The 7-day chart used `func.date(created_at) == day.isoformat()`; Postgres rejects comparing a `date` to a text string (`operator does not exist: date = text`) | Compare against a portable half-open range (`created_at >= day_start AND < next_day`) instead of `func.date(...) == str` |
+| Merchants **couldn't fill latitude/longitude** when creating a shipment | The only input was clicking the right spot on the map; raw lat/lon boxes meant nothing to users | Added address search (Nominatim), "use my location", and a draggable pin; the lat/lon fields are now **read-only** and filled by those tools |
 
 ---
 
@@ -280,6 +313,7 @@ again. Several were "works on my machine" traps where tests passed but the runni
 | Postgres driver | psycopg3 | Python 3.14 wheels. |
 | Optimiser | k-means + NN + 2-opt, pure-Python core | Good routes, zero hard heavy deps. |
 | Dispatch planning | Day/time picker + technique comparison, ranked by makespan | Send couriers at the right time with the right algorithm; estimate before committing. |
+| Fleet capacity | Per-vehicle caps (bike 3 / moto 5 / car 10 / van 15) | Never overload a vehicle; overflow waits for the next round. |
 | Street routing | OSMnx (optional) | Realism without fragility. |
 | Lifecycle | Status + append-only events | Auditable, customer-facing timeline. |
 | Auth | Single user table + roles | Simplicity with clear permissions. |

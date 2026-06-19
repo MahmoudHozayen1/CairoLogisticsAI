@@ -35,7 +35,7 @@
                         <tr>
                             <td><strong>{{ c.name }}</strong><div class="small text-muted">{{ c.email }}</div></td>
                             <td>{{ c.hub.name if c.hub else '—' }}</td>
-                            <td>{{ c.vehicle_type }}</td>
+                            <td>{{ c.vehicle_type }}<div class="small text-muted">max {{ c.route_capacity }} parcels</div></td>
                             <td>
                                 {% if c.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
                                 {% if c.is_available %}<span class="badge bg-info">Available</span>{% else %}<span class="badge bg-warning text-dark">Off duty</span>{% endif %}

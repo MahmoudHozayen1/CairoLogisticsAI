@@ -9,7 +9,7 @@ from wtforms.validators import (
     DataRequired, Email, Length, EqualTo, Optional, NumberRange, Regexp,
 )
 
-from .models import Role
+from .models import Role, Vehicle
 
 PHONE_RE = r"^[0-9+\-\s]{7,20}$"
 
@@ -46,7 +46,7 @@ class CourierForm(FlaskForm):
     hub_id = SelectField("Assigned hub", coerce=int, validators=[DataRequired()])
     vehicle_type = SelectField(
         "Vehicle",
-        choices=[("Motorcycle", "Motorcycle"), ("Car", "Car"), ("Van", "Van"), ("Bicycle", "Bicycle")],
+        choices=Vehicle.CHOICES,
         validators=[DataRequired()],
     )
     password = PasswordField("Password", validators=[Optional(), Length(min=8)])
@@ -66,6 +66,11 @@ class ShipmentForm(FlaskForm):
     cod_amount = FloatField("Cash on delivery (EGP)", validators=[Optional(), NumberRange(0, 1_000_000)], default=0.0)
     hub_id = SelectField("Origin hub", coerce=int, validators=[Optional()])
     submit = SubmitField("Create shipment")
+
+
+class AdminShipmentForm(ShipmentForm):
+    """Shipment form for admins, who must also choose the owning merchant."""
+    merchant_id = SelectField("Merchant", coerce=int, validators=[DataRequired()])
 
 
 class DeliveryUpdateForm(FlaskForm):

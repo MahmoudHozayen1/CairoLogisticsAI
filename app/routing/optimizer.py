@@ -277,12 +277,65 @@ def _estimate_route(start: List[float], ordered: List[Shipment], departure: date
     return total_km, minutes
 
 
+def _assign_with_capacity(shipments: List[Shipment], couriers: List[User]):
+    """Assign parcels to couriers respecting each vehicle's capacity.
+
+    Geography first (k-means gives each courier a coherent zone), then a
+    capacity-constrained greedy pass: every parcel goes to its nearest courier
+    that still has room; if all nearby vehicles are full it spills to the next
+    nearest, and only when the **whole fleet** is at capacity is it left over.
+
+    Returns ``([(courier, [shipments]), ...], [overflow_shipments])``.
+    """
+    n = len(shipments)
+    k = min(n, len(couriers))
+    if k == 0:
+        return [], list(shipments)
+
+    # Give the biggest vehicles the first pick of clusters so dense zones land on
+    # high-capacity couriers (fewer overflow parcels overall).
+    couriers = sorted(couriers, key=lambda c: c.route_capacity, reverse=True)[:k]
+    coords = [s.coords for s in shipments]
+    labels = _kmeans_labels(coords, k)
+
+    centroids: List[List[float]] = []
+    for j in range(k):
+        members = [coords[i] for i in range(n) if labels[i] == j]
+        if members:
+            centroids.append([
+                sum(m[0] for m in members) / len(members),
+                sum(m[1] for m in members) / len(members),
+            ])
+        else:  # empty cluster -> reuse an arbitrary point so it still has a centre
+            centroids.append(coords[0])
+
+    remaining = [c.route_capacity for c in couriers]
+    buckets: List[List[Shipment]] = [[] for _ in range(k)]
+    overflow: List[Shipment] = []
+
+    # Assign the most "decisive" parcels (closest to their nearest centre) first.
+    order = sorted(range(n), key=lambda i: min(haversine_km(coords[i], ct) for ct in centroids))
+    for i in order:
+        prefs = sorted(range(k), key=lambda j: haversine_km(coords[i], centroids[j]))
+        for j in prefs:
+            if remaining[j] > 0:
+                buckets[j].append(shipments[i])
+                remaining[j] -= 1
+                break
+        else:
+            overflow.append(shipments[i])
+
+    assigned = [(couriers[j], buckets[j]) for j in range(k) if buckets[j]]
+    return assigned, overflow
+
+
 def _routable_clusters(hubs):
     """Group routable parcels into per-courier clusters (shared by compare/persist).
 
     Returns a list of ``(hub, courier_or_None, [shipments])`` tuples using the
-    same k-means assignment the optimiser persists, so previews and results
-    line up exactly.
+    same capacity-aware assignment the optimiser persists, so previews and
+    results line up exactly. A ``None`` courier means the parcels could not be
+    assigned (no courier, or the fleet is over capacity).
     """
     clusters = []
     for h in hubs:
@@ -298,12 +351,12 @@ def _routable_clusters(hubs):
         if not couriers:
             clusters.append((h, None, shipments))
             continue
-        k = min(len(shipments), len(couriers))
-        labels = _kmeans_labels([s.coords for s in shipments], k)
-        for c_idx in range(k):
-            load = [shipments[i] for i in range(len(shipments)) if labels[i] == c_idx]
-            if load:
-                clusters.append((h, couriers[c_idx], load))
+
+        assigned, overflow = _assign_with_capacity(shipments, couriers)
+        for courier, load in assigned:
+            clusters.append((h, courier, load))
+        if overflow:
+            clusters.append((h, None, overflow))
     return clusters
 
 
@@ -318,13 +371,16 @@ def compare_strategies(hub: Hub | None = None, departure: datetime | None = None
     departure = departure or datetime.now()
     hubs = [hub] if hub else Hub.query.all()
     clusters = _routable_clusters(hubs)
+    # Only clusters with a real courier are deliverable; the rest are over-capacity.
+    routable = [(h, c, load) for (h, c, load) in clusters if c is not None]
+    unassigned = sum(len(load) for (h, c, load) in clusters if c is None)
 
     results = []
     for key in STRATEGY_ORDER:
         func = STRATEGIES[key]["func"]
         total_km = 0.0
         makespan = 0.0
-        for h, _courier, load in clusters:
+        for h, _courier, load in routable:
             ordered = func(h.coords, load)
             d_km, d_min = _estimate_route(h.coords, ordered, departure)
             total_km += d_km
@@ -350,8 +406,9 @@ def compare_strategies(hub: Hub | None = None, departure: datetime | None = None
         "departure": departure,
         "results": results,
         "recommended": recommended,
-        "stops": sum(len(c[2]) for c in clusters),
-        "couriers": sum(1 for c in clusters if c[1] is not None),
+        "stops": sum(len(load) for (h, c, load) in routable),
+        "couriers": len(routable),
+        "unassigned": unassigned,
     }
 
 
@@ -448,13 +505,12 @@ def optimize_and_persist(hub: Hub | None = None, departure: datetime | None = No
             summary["unassigned"] += len(shipments)
             continue
 
-        k = min(len(shipments), len(couriers))
-        coords = [s.coords for s in shipments]
-        labels = _kmeans_labels(coords, k)
+        # Capacity-aware assignment: never overload a vehicle; parcels beyond the
+        # fleet's total capacity stay unassigned for the next dispatch round.
+        assigned, overflow = _assign_with_capacity(shipments, couriers)
+        summary["unassigned"] += len(overflow)
 
-        for c_idx in range(k):
-            courier = couriers[c_idx]
-            load = [shipments[i] for i in range(len(shipments)) if labels[i] == c_idx]
+        for courier, load in assigned:
             if not load:
                 continue
 
