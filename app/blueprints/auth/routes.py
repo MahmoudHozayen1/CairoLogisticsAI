@@ -33,10 +33,10 @@ def login():
 
 @bp.route("/register", methods=["GET", "POST"])
 def register():
-    """Public self-service registration creates merchant accounts only.
+    """Public self-service registration for merchants and couriers.
 
-    Couriers are created by admins; the first admin is created via the
-    ``flask create-admin`` CLI command or the seed script.
+    Admins are created by the ``flask create-admin`` CLI command or the seed
+    script; new couriers are unassigned until an admin gives them a hub.
     """
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
@@ -44,20 +44,29 @@ def register():
     form = RegisterForm()
     if form.validate_on_submit():
         email = form.email.data.lower().strip()
+        # Guard against a race between validation and commit; the form already
+        # rejects duplicates, and the column has a UNIQUE constraint.
         if User.query.filter_by(email=email).first():
             flash("An account with that email already exists.", "warning")
         else:
+            role = form.role.data if form.role.data in (Role.MERCHANT, Role.COURIER) else Role.MERCHANT
             user = User(
                 name=form.name.data.strip(),
                 email=email,
                 phone=form.phone.data,
-                business_name=form.business_name.data or None,
-                role=Role.MERCHANT,
+                role=role,
             )
+            if role == Role.MERCHANT:
+                user.business_name = form.business_name.data or None
+            else:
+                user.vehicle_type = form.vehicle_type.data or "Motorcycle"
             user.set_password(form.password.data)
             db.session.add(user)
             db.session.commit()
             login_user(user)
+            if role == Role.COURIER:
+                flash("Your courier account is ready. An admin will assign your hub.", "success")
+                return redirect(url_for("courier.dashboard"))
             flash("Your merchant account is ready.", "success")
             return redirect(url_for("merchant.dashboard"))
     return render_template("auth/register.html", form=form)

@@ -7,9 +7,10 @@ from wtforms import (
 )
 from wtforms.validators import (
     DataRequired, Email, Length, EqualTo, Optional, NumberRange, Regexp,
+    ValidationError,
 )
 
-from .models import Role, Vehicle
+from .models import Role, User, Vehicle
 
 PHONE_RE = r"^[0-9+\-\s]{7,20}$"
 
@@ -22,13 +23,27 @@ class LoginForm(FlaskForm):
 
 
 class RegisterForm(FlaskForm):
+    # Public self-service signup is limited to merchants and couriers; admin
+    # accounts are provisioned via the CLI / seed script for security.
+    ROLE_CHOICES = [
+        (Role.MERCHANT, "Merchant"),
+        (Role.COURIER, "Courier"),
+    ]
+
     name = StringField("Full name", validators=[DataRequired(), Length(2, 120)])
+    role = SelectField("I am a", choices=ROLE_CHOICES, default=Role.MERCHANT, validators=[DataRequired()])
     business_name = StringField("Business name", validators=[Optional(), Length(0, 160)])
+    vehicle_type = SelectField("Vehicle", choices=Vehicle.CHOICES, validators=[Optional()])
     email = StringField("Email", validators=[DataRequired(), Email()])
     phone = StringField("Phone", validators=[Optional(), Regexp(PHONE_RE, message="Enter a valid phone number.")])
     password = PasswordField("Password", validators=[DataRequired(), Length(min=8, message="Use at least 8 characters.")])
     confirm = PasswordField("Confirm password", validators=[DataRequired(), EqualTo("password", message="Passwords must match.")])
-    submit = SubmitField("Create merchant account")
+    submit = SubmitField("Create account")
+
+    def validate_email(self, field):
+        """Reject duplicate emails with a field-level error (case-insensitive)."""
+        if User.query.filter_by(email=field.data.lower().strip()).first():
+            raise ValidationError("An account with that email already exists.")
 
 
 class HubForm(FlaskForm):

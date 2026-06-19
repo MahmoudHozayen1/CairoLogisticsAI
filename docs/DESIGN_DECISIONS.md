@@ -222,8 +222,10 @@ overwriting a status. Statuses (`pending → at_warehouse → out_for_delivery �
 **Decisions.**
 - **One `User` table** with a `role` column rather than three tables — simpler relationships, one
   login flow. Role-specific fields (hub, vehicle, business name) live on the same row.
-- **Self-service registration creates merchants only.** Couriers are created by admins; the first
-  admin comes from a CLI command or the seed script. This mirrors how real platforms onboard.
+- **Self-service registration supports merchants and couriers**, with a role selector on the signup
+  form; admin accounts are never created publicly (only via a CLI command or the seed script). A new
+  courier signs up unassigned and an admin later gives them a hub. Email is unique (DB constraint +
+  case-insensitive form validation), so two people can't register the same address.
 - **Defence in depth.** Werkzeug password hashing, CSRF tokens on every form, a `role_required`
   decorator for authorisation, server-side WTForms validation, and open-redirect protection on the
   login `next` parameter.

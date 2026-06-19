@@ -42,7 +42,8 @@ No account is needed — this is what you'd share with end customers.
 
 ## 2. Merchant (the business shipping parcels)
 
-Sign up at `/auth/register` (creates a merchant account) or use the demo merchant.
+Sign up at `/auth/register` (choose the **Merchant** role) or use the demo merchant. Each email can
+only be registered once.
 
 ### Dashboard (`/merchant`)
 KPI cards (total / delivered / in-transit / pending) and your most recent shipments.
@@ -62,7 +63,8 @@ the timeline and **cancel** a parcel while it's still pending.
 
 ## 3. Courier (the driver)
 
-Sign in with a courier account (created by an admin or seeded).
+Sign in with a courier account — either self-register at `/auth/register` (choose the **Courier**
+role and pick a vehicle; an admin assigns your hub afterwards), or use one created by an admin / seed.
 
 ### My deliveries (`/courier`)
 - KPI cards: active stops, lifetime deliveries, **COD to collect**.
