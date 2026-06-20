@@ -1,0 +1,214 @@
+{
+  "overall": {
+    "fifo": {
+      "label": "As received (FIFO)",
+      "distance_km": 105.756,
+      "improvement_pct": 0.0,
+      "optimality_gap_pct": 84.979,
+      "runtime_ms": 0.002
+    },
+    "nearest": {
+      "label": "Nearest Neighbour",
+      "distance_km": 37.003,
+      "improvement_pct": 58.303,
+      "optimality_gap_pct": 7.574,
+      "runtime_ms": 0.162
+    },
+    "two_opt": {
+      "label": "Nearest Neighbour + 2-opt",
+      "distance_km": 33.8,
+      "improvement_pct": 61.529,
+      "optimality_gap_pct": 0.936,
+      "runtime_ms": 15.594
+    },
+    "or_opt": {
+      "label": "2-opt + Or-opt (thorough)",
+      "distance_km": 33.425,
+      "improvement_pct": 61.921,
+      "optimality_gap_pct": 0.098,
+      "runtime_ms": 54.296
+    },
+    "christofides": {
+      "label": "Christofides (NetworkX)",
+      "distance_km": 37.292,
+      "improvement_pct": 57.701,
+      "optimality_gap_pct": 9.277,
+      "runtime_ms": 7.426
+    },
+    "annealing": {
+      "label": "Simulated Annealing (NetworkX)",
+      "distance_km": 33.8,
+      "improvement_pct": 61.529,
+      "optimality_gap_pct": 0.936,
+      "runtime_ms": 19.966
+    }
+  },
+  "by_size": {
+    "8": {
+      "fifo": {
+        "distance_km": 38.262,
+        "improvement_pct": 0.0,
+        "optimality_gap_pct": 84.979,
+        "runtime_ms": 0.004
+      },
+      "nearest": {
+        "distance_km": 22.132,
+        "improvement_pct": 40.777,
+        "optimality_gap_pct": 7.574,
+        "runtime_ms": 0.028
+      },
+      "two_opt": {
+        "distance_km": 20.879,
+        "improvement_pct": 44.489,
+        "optimality_gap_pct": 0.936,
+        "runtime_ms": 0.244
+      },
+      "or_opt": {
+        "distance_km": 20.709,
+        "improvement_pct": 44.917,
+        "optimality_gap_pct": 0.098,
+        "runtime_ms": 0.839
+      },
+      "christofides": {
+        "distance_km": 22.585,
+        "improvement_pct": 39.969,
+        "optimality_gap_pct": 9.277,
+        "runtime_ms": 4.794
+      },
+      "annealing": {
+        "distance_km": 20.879,
+        "improvement_pct": 44.489,
+        "optimality_gap_pct": 0.936,
+        "runtime_ms": 0.498
+      }
+    },
+    "15": {
+      "fifo": {
+        "distance_km": 69.596,
+        "improvement_pct": 0.0,
+        "optimality_gap_pct": null,
+        "runtime_ms": 0.001
+      },
+      "nearest": {
+        "distance_km": 31.224,
+        "improvement_pct": 54.788,
+        "optimality_gap_pct": null,
+        "runtime_ms": 0.062
+      },
+      "two_opt": {
+        "distance_km": 29.046,
+        "improvement_pct": 57.943,
+        "optimality_gap_pct": null,
+        "runtime_ms": 1.875
+      },
+      "or_opt": {
+        "distance_km": 28.733,
+        "improvement_pct": 58.397,
+        "optimality_gap_pct": null,
+        "runtime_ms": 6.348
+      },
+      "christofides": {
+        "distance_km": 32.447,
+        "improvement_pct": 52.938,
+        "optimality_gap_pct": null,
+        "runtime_ms": 1.856
+      },
+      "annealing": {
+        "distance_km": 29.046,
+        "improvement_pct": 57.943,
+        "optimality_gap_pct": null,
+        "runtime_ms": 2.838
+      }
+    },
+    "25": {
+      "fifo": {
+        "distance_km": 119.722,
+        "improvement_pct": 0.0,
+        "optimality_gap_pct": null,
+        "runtime_ms": 0.002
+      },
+      "nearest": {
+        "distance_km": 41.582,
+        "improvement_pct": 65.018,
+        "optimality_gap_pct": null,
+        "runtime_ms": 0.161
+      },
+      "two_opt": {
+        "distance_km": 37.986,
+        "improvement_pct": 68.07,
+        "optimality_gap_pct": null,
+        "runtime_ms": 10.153
+      },
+      "or_opt": {
+        "distance_km": 37.536,
+        "improvement_pct": 68.46,
+        "optimality_gap_pct": null,
+        "runtime_ms": 35.98
+      },
+      "christofides": {
+        "distance_km": 41.867,
+        "improvement_pct": 64.861,
+        "optimality_gap_pct": null,
+        "runtime_ms": 5.711
+      },
+      "annealing": {
+        "distance_km": 37.986,
+        "improvement_pct": 68.07,
+        "optimality_gap_pct": null,
+        "runtime_ms": 13.663
+      }
+    },
+    "40": {
+      "fifo": {
+        "distance_km": 195.445,
+        "improvement_pct": 0.0,
+        "optimality_gap_pct": null,
+        "runtime_ms": 0.003
+      },
+      "nearest": {
+        "distance_km": 53.075,
+        "improvement_pct": 72.631,
+        "optimality_gap_pct": null,
+        "runtime_ms": 0.399
+      },
+      "two_opt": {
+        "distance_km": 47.29,
+        "improvement_pct": 75.616,
+        "optimality_gap_pct": null,
+        "runtime_ms": 50.102
+      },
+      "or_opt": {
+        "distance_km": 46.721,
+        "improvement_pct": 75.91,
+        "optimality_gap_pct": null,
+        "runtime_ms": 174.019
+      },
+      "christofides": {
+        "distance_km": 52.271,
+        "improvement_pct": 73.037,
+        "optimality_gap_pct": null,
+        "runtime_ms": 17.342
+      },
+      "annealing": {
+        "distance_km": 47.29,
+        "improvement_pct": 75.616,
+        "optimality_gap_pct": null,
+        "runtime_ms": 62.864
+      }
+    }
+  },
+  "sizes": [
+    8,
+    15,
+    25,
+    40
+  ],
+  "order": [
+    "fifo",
+    "nearest",
+    "two_opt",
+    "or_opt",
+    "christofides",
+    "annealing"
+  ]
+}

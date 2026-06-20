@@ -153,6 +153,7 @@ def live_map():
             "tracking_number": st.shipment.tracking_number,
             "receiver": st.shipment.receiver_name,
             "coords": st.shipment.coords,
+            "eta_minutes": st.eta_minutes,
         })
     courier_names = {c.id: c.name for c in User.query.filter_by(role=Role.COURIER).all()}
 

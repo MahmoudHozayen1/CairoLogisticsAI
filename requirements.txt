@@ -17,10 +17,22 @@ pytest==9.0.3
 # --- Documentation / presentation generator ---
 python-pptx==1.0.2
 
+# --- Route optimization: graph algorithms (NetworkX TSP techniques) ---
+# Unlocks the Christofides (1.5x guarantee) and Simulated Annealing strategies
+# in app/routing/optimizer.py. The optimizer falls back to its pure-Python
+# 2-opt sequencing if NetworkX is not installed, so this is recommended, not
+# strictly required.
+networkx==3.4.2
+
+# --- Data-science benchmarking & reporting ---
+# Used by scripts/benchmark_optimizer.py to regenerate the thesis-ready charts
+# under docs/benchmarks/. Not needed for request/response web serving, but kept
+# installed so the documented benchmark command works out of the box.
+matplotlib==3.11.0
+
 # --- Optional: high-fidelity street routing for the optimizer ---
 # Enable with ENABLE_STREET_ROUTING=1. Heavy dependencies; the optimizer falls
 # back to fast straight-line geometry when these are not installed.
 # osmnx==1.9.4
 # scikit-learn==1.5.2
 # numpy==2.1.3
-# networkx==3.4.2

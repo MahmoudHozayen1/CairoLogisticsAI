@@ -185,6 +185,79 @@ def _seq_or_opt(start: List[float], stops: List[Shipment]) -> List[Shipment]:
     return _or_opt(start, _two_opt(start, _nearest_neighbour(start, stops)))
 
 
+# --------------------------------------------------------------------------- #
+#  Graph-based techniques via NetworkX (approximation algorithms)
+# --------------------------------------------------------------------------- #
+def _nx_tsp_order(start: List[float], stops: List[Shipment], method) -> List[Shipment]:
+    """Order ``stops`` with a NetworkX TSP approximation, anchored at the depot.
+
+    Builds a complete graph over the depot + drop-off points (edge weight =
+    great-circle km), solves the metric-TSP *cycle* with ``method`` and rotates
+    the tour so it begins at the depot, dropping the return leg to match our
+    open-route model. Raises if NetworkX is unavailable so callers can fall back.
+    """
+    from networkx.algorithms import approximation as approx  # optional heavy dep
+    import networkx as nx
+
+    coords = [start] + [s.coords for s in stops]
+    n = len(coords)
+    graph = nx.complete_graph(n)
+    for i in range(n):
+        for j in range(i + 1, n):
+            graph[i][j]["weight"] = haversine_km(coords[i], coords[j])
+    cycle = approx.traveling_salesman_problem(
+        graph, weight="weight", cycle=True, method=method
+    )
+    if cycle and cycle[0] == cycle[-1]:
+        cycle = cycle[:-1]
+    depot = cycle.index(0)
+    rotated = cycle[depot:] + cycle[:depot]  # tour, re-based to start at the depot
+
+    # The solver minimises a *round-trip cycle*, but courier routes are *open*
+    # (no return to the hub). Turning the cycle into an open path means breaking
+    # one of the depot's two edges; we keep the orientation that yields the
+    # shorter open route (equivalently, we drop the longer depot-incident edge).
+    forward = rotated[1:]
+    reverse = forward[::-1]
+
+    def _open_len(seq):
+        prev, total = 0, 0.0
+        for node in seq:
+            total += haversine_km(coords[prev], coords[node])
+            prev = node
+        return total
+
+    best = forward if _open_len(forward) <= _open_len(reverse) else reverse
+    # ``best`` holds 1-based indices into ``stops`` (node 0 is the depot).
+    return [stops[node - 1] for node in best]
+
+
+def _seq_christofides(start: List[float], stops: List[Shipment]) -> List[Shipment]:
+    """Christofides' algorithm — a 1.5-approximation for metric TSP."""
+    if len(stops) < 4:
+        return _seq_two_opt(start, stops)
+    try:
+        from networkx.algorithms.approximation import christofides
+        return _nx_tsp_order(start, stops, christofides)
+    except Exception:
+        return _seq_two_opt(start, stops)
+
+
+def _seq_annealing(start: List[float], stops: List[Shipment]) -> List[Shipment]:
+    """Simulated-annealing metaheuristic (NetworkX), seeded with a greedy tour."""
+    if len(stops) < 4:
+        return _seq_two_opt(start, stops)
+    try:
+        from networkx.algorithms.approximation import simulated_annealing_tsp
+
+        def method(g, wt):  # the TSP wrapper calls method(graph, weight)
+            return simulated_annealing_tsp(g, "greedy", weight=wt, seed=42)
+
+        return _nx_tsp_order(start, stops, method)
+    except Exception:
+        return _seq_two_opt(start, stops)
+
+
 # Each technique: a label, a one-line description and the sequencing function.
 STRATEGIES = {
     "fifo": {
@@ -207,9 +280,19 @@ STRATEGIES = {
         "blurb": "Adds segment relocation on top of 2-opt. Highest quality, slightly slower.",
         "func": _seq_or_opt,
     },
+    "christofides": {
+        "label": "Christofides (NetworkX)",
+        "blurb": "Graph algorithm with a proven 1.5\u00d7-optimal guarantee for metric TSP.",
+        "func": _seq_christofides,
+    },
+    "annealing": {
+        "label": "Simulated Annealing (NetworkX)",
+        "blurb": "Metaheuristic that escapes local optima by sometimes accepting worse moves.",
+        "func": _seq_annealing,
+    },
 }
 # Display / evaluation order, from simplest to most thorough.
-STRATEGY_ORDER = ["fifo", "nearest", "two_opt", "or_opt"]
+STRATEGY_ORDER = ["fifo", "nearest", "two_opt", "or_opt", "christofides", "annealing"]
 DEFAULT_STRATEGY = "two_opt"
 
 
@@ -399,8 +482,22 @@ def compare_strategies(hub: Hub | None = None, departure: datetime | None = None
         recommended = best["key"]
     else:
         recommended = DEFAULT_STRATEGY
+    baseline = next((r for r in results if r["key"] == "fifo"), None)
     for r in results:
         r["recommended"] = (r["key"] == recommended)
+        if baseline:
+            duration_saved = baseline["duration_min"] - r["duration_min"]
+            distance_saved = baseline["distance_km"] - r["distance_km"]
+            r["duration_saved_min"] = max(0, int(round(duration_saved)))
+            r["distance_saved_km"] = round(max(0.0, distance_saved), 2)
+            r["duration_saved_pct"] = (
+                round((r["duration_saved_min"] / baseline["duration_min"]) * 100)
+                if baseline["duration_min"] else 0
+            )
+        else:
+            r["duration_saved_min"] = 0
+            r["distance_saved_km"] = 0.0
+            r["duration_saved_pct"] = 0
 
     return {
         "departure": departure,

@@ -17,7 +17,7 @@
 |------|--------------|
 | **Multi-role auth** | Admin, Courier and Merchant portals with role-based access control. |
 | **Merchant portal** | Create shipments by dropping a pin on a map, set COD, track every parcel. |
-| **AI route optimisation** | k-means clustering per courier + nearest-neighbour & 2-opt TSP sequencing. |
+| **AI route optimisation** | k-means clustering per courier + 6 TSP techniques (greedy, 2-opt, Or-opt, NetworkX Christofides & Simulated Annealing), benchmarked. |
 | **Street-following routes** | Real road geometry via OSRM (cached, with offline fallback). |
 | **Live traffic & closures** | Routes coloured by simulated, time-of-day congestion; admins mark road closures that the optimiser re-routes around. |
 | **Courier portal** | Optimised stop list, live route map, one-tap *Delivered/Failed*, photo proof of delivery. |
@@ -165,13 +165,44 @@ flask --app run db upgrade
 For each hub the engine:
 
 1. **Clusters** at-warehouse parcels into one group per available courier (*k-means*).
-2. **Sequences** each courier's stops with **nearest-neighbour + 2-opt** (a TSP heuristic).
+2. **Sequences** each courier's stops with a selectable **optimisation technique** (see below).
 3. **Draws** the route along **real streets** using OSRM (`ROUTING_PROVIDER=osrm`, the default;
    results are cached on disk). It falls back to straight lines if offline, and an optional
    local OSMnx graph is also supported.
 4. **Avoids road closures** — admins mark closed roads on the *Traffic* page; the optimiser
    re-routes the drawn geometry around active closures and flags any leg it can't clear.
 5. **Estimates** an ETA per stop from street distance and average courier speed.
+
+### Optimisation techniques
+
+The Travelling-Salesman ordering of each courier's stops can be solved with six interchangeable
+techniques (in `app/routing/optimizer.py`, all selectable from the admin *Map* page):
+
+| Key | Technique | Idea |
+|-----|-----------|------|
+| `fifo` | As received | No optimisation — the baseline to beat. |
+| `nearest` | Nearest Neighbour | Greedy: always drive to the closest remaining stop. |
+| `two_opt` | Nearest Neighbour + 2-opt | Greedy tour refined by 2-opt edge swaps. |
+| `or_opt` | 2-opt + Or-opt | Adds segment relocation — highest quality. |
+| `christofides` | **Christofides (NetworkX)** | Graph algorithm with a proven **1.5× optimal** guarantee for metric TSP. |
+| `annealing` | **Simulated Annealing (NetworkX)** | Metaheuristic that escapes local optima by sometimes accepting worse moves. |
+
+The last two are powered by [NetworkX](https://networkx.org); if NetworkX is not installed the
+optimiser falls back to its pure-Python 2-opt sequencing, so the app still runs.
+
+### Benchmarking (the data-science core)
+
+`scripts/benchmark_optimizer.py` empirically compares every technique across many randomly
+generated delivery scenarios — measuring total distance, improvement over FIFO, **optimality gap**
+vs. the exact optimum (brute force on small instances) and runtime — and writes a CSV, a JSON
+summary and charts under `docs/benchmarks/`:
+
+```bash
+python scripts/benchmark_optimizer.py                 # full sweep + charts
+python scripts/benchmark_optimizer.py --no-plots      # data only
+```
+
+See **[docs/OPTIMIZATION.md](docs/OPTIMIZATION.md)** for the methodology, results and discussion.
 
 ### Traffic colours
 

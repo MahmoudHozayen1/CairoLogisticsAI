@@ -76,6 +76,7 @@
                 <tr>
                     <th>Technique</th>
                     <th class="text-end">Est. completion</th>
+                    <th class="text-end">Saved vs FIFO</th>
                     <th class="text-end">Total distance</th>
                     <th></th>
                 </tr>
@@ -88,7 +89,22 @@
                         <div class="text-muted small">{{ r.blurb }}</div>
                     </td>
                     <td class="text-end fw-semibold">{{ r.duration_min }} min</td>
-                    <td class="text-end">{{ r.distance_km }} km</td>
+                    <td class="text-end">
+                        {% if r.duration_saved_min %}
+                            <span class="fw-semibold text-success">{{ r.duration_saved_min }} min</span>
+                            <div class="text-muted small">{{ r.duration_saved_pct }}% faster</div>
+                        {% elif r.key == 'fifo' %}
+                            <span class="text-muted small">baseline</span>
+                        {% else %}
+                            <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {{ r.distance_km }} km
+                        {% if r.distance_saved_km %}
+                            <div class="text-muted small">{{ r.distance_saved_km }} km saved</div>
+                        {% endif %}
+                    </td>
                     <td class="text-end">
                         {% if r.recommended %}<span class="badge bg-success"><i class="bi bi-check-lg"></i> Recommended</span>{% endif %}
                     </td>
@@ -133,6 +149,7 @@
             <ol class="small mb-0 ps-3">
                 {% for st in stops %}
                 <li>{{ st.tracking_number }} — {{ st.receiver }}
+                    {% if st.eta_minutes %}<span class="text-muted">(~{{ st.eta_minutes }} min)</span>{% endif %}
                     {% if st.blocked %}<span class="badge bg-danger ms-1">closure</span>{% endif %}
                 </li>
                 {% endfor %}
@@ -140,7 +157,7 @@
         </div>
     </div>
     {% else %}
-    <div class="col-12"><div class="alert alert-light border">No optimised routes yet. Click <strong>Optimise all hubs</strong>.</div></div>
+    <div class="col-12"><div class="alert alert-light border">No optimised routes yet. Click <strong>Optimise &amp; dispatch</strong>.</div></div>
     {% endfor %}
 </div>
 

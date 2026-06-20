@@ -316,6 +316,33 @@ def test_strategy_comparison_recommends(app):
         assert cmp["recommended"] in durations
 
 
+def test_all_strategies_produce_valid_routes():
+    """Every technique returns a valid permutation and beats the FIFO order.
+
+    Covers the NetworkX-backed Christofides and Simulated Annealing strategies as
+    well as the pure-Python heuristics, on a scrambled synthetic instance.
+    """
+    import random
+    from app.routing.optimizer import STRATEGIES, STRATEGY_ORDER, _route_distance
+
+    class _Stop:
+        def __init__(self, coords):
+            self.coords = coords
+
+    rng = random.Random(7)
+    depot = [29.96, 31.25]
+    stops = [_Stop([29.96 + rng.uniform(-0.04, 0.04), 31.25 + rng.uniform(-0.04, 0.04)])
+             for _ in range(12)]
+    ids = sorted(id(s) for s in stops)
+
+    fifo_dist = _route_distance(depot, STRATEGIES["fifo"]["func"](depot, stops))
+    for key in STRATEGY_ORDER:
+        ordered = STRATEGIES[key]["func"](depot, stops)
+        assert sorted(id(s) for s in ordered) == ids, f"{key} dropped or duplicated a stop"
+        if key != "fifo":
+            assert _route_distance(depot, ordered) <= fifo_dist + 1e-9, f"{key} lost to FIFO"
+
+
 def test_optimize_with_strategy_and_departure(app):
     """Persisting a chosen technique at a chosen time yields increasing ETAs."""
     from app.routing import optimize_and_persist
