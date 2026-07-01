@@ -23,6 +23,7 @@ DARK = RGBColor(0x1F, 0x29, 0x33)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "docs", "presentation.pptx")
+BENCH_DIR = os.path.join(HERE, "docs", "benchmarks")
 
 # (title, [bullets], subtitle_or_None)
 SLIDES = [
@@ -68,10 +69,27 @@ SLIDES = [
     ("The AI Route Optimiser", [
         "Vehicle routing is NP-hard \u2014 we decompose it:",
         "1) k-means clustering decides which courier serves which parcels.",
-        "2) Nearest-neighbour + 2-opt sequence each route (the TSP).",
-        "3) Optional OSMnx + Dijkstra draw real road paths; ETA from speed.",
+        "2) A capacity-aware pass assigns parcels without overloading a vehicle.",
+        "3) A selectable technique sequences each route (the TSP sub-problem).",
+        "4) OSRM draws real road paths; ETA from distance, speed & traffic.",
         "Pure-Python fallbacks mean it always runs \u2014 heavy ML is optional.",
     ], None),
+    ("Six Optimisation Techniques", [
+        "FIFO \u2014 as received: the baseline to beat.",
+        "Nearest Neighbour \u2014 fast greedy heuristic.",
+        "2-opt \u2014 local search removing crossing/expensive edges (default).",
+        "Or-opt \u2014 adds segment relocation; highest quality.",
+        "Christofides (NetworkX) \u2014 proven 1.5\u00d7-optimal guarantee for metric TSP.",
+        "Simulated Annealing (NetworkX) \u2014 metaheuristic escaping local optima.",
+    ], None),
+    ("Benchmark: How Much Does It Save?", [
+        "Optimised routes cut total distance ~60\u201362% vs. naive FIFO dispatch.",
+        "40 random scenarios per size \u00d7 sizes {8, 15, 25, 40}, fixed seed.",
+    ], "improvement_by_strategy.png"),
+    ("Benchmark: Optimality & Speed", [
+        "On solvable instances, Or-opt is ~0.1% above optimal; 2-opt & SA < 1%.",
+        "2-opt gives the best quality/speed balance; Christofides scales gently.",
+    ], "runtime_scaling.png"),
     ("Shipment Lifecycle", [
         "pending \u2192 at_warehouse \u2192 out_for_delivery \u2192 delivered.",
         "Plus failed, returned and cancelled states.",
@@ -166,6 +184,35 @@ def _content_slide(prs, title, bullets):
         para.space_after = Pt(14)
 
 
+def _image_slide(prs, title, bullets, image_filename):
+    """A content slide whose lower half showcases a benchmark chart image."""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _set_bg(slide, LIGHT)
+    band = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.333), Inches(1.25))
+    band.fill.solid(); band.fill.fore_color.rgb = PRIMARY; band.line.fill.background()
+    tbox = band.text_frame; tbox.word_wrap = True
+    tbox.margin_left = Inches(0.6)
+    p = tbox.paragraphs[0]
+    r = p.add_run(); r.text = title
+    r.font.size = Pt(30); r.font.bold = True; r.font.color.rgb = WHITE
+
+    body = slide.shapes.add_textbox(Inches(0.9), Inches(1.45), Inches(11.5), Inches(1.4))
+    tf = body.text_frame; tf.word_wrap = True
+    for i, b in enumerate(bullets):
+        para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        bullet = para.add_run(); bullet.text = "\u25B8  "
+        bullet.font.size = Pt(16); bullet.font.color.rgb = ACCENT; bullet.font.bold = True
+        run = para.add_run(); run.text = b
+        run.font.size = Pt(16); run.font.color.rgb = DARK
+        para.space_after = Pt(6)
+
+    path = os.path.join(BENCH_DIR, image_filename)
+    if os.path.exists(path):
+        pic_w = Inches(7.47)  # keeps the 8:4.5 chart aspect ratio at 4.2" tall
+        left = (Inches(13.333) - pic_w) / 2
+        slide.shapes.add_picture(path, left, Inches(2.9), height=Inches(4.2))
+
+
 def build():
     prs = Presentation()
     prs.slide_width = Inches(13.333)
@@ -173,6 +220,8 @@ def build():
     for title, bullets, kind in SLIDES:
         if kind == "TITLE":
             _title_slide(prs, title, bullets)
+        elif isinstance(kind, str) and kind.endswith(".png"):
+            _image_slide(prs, title, bullets, kind)
         else:
             _content_slide(prs, title, bullets)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
