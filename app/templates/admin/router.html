@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Learning-to-Route{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0">
+        <i class="bi bi-diagram-3"></i> Learning-to-Route</h3>
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ url_for('admin.ai_overview') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to AI</a>
+        <form method="GET" class="d-flex align-items-center gap-2">
+            <select name="hub_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for h in hubs %}
+                <option value="{{ h.id }}" {{ 'selected' if hub and h.id == hub.id }}>{{ h.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+<p class="text-muted">
+    A <strong>pointer-network-style policy</strong> picks the next stop by paying
+    attention to every remaining parcel, scoring each with learned weights and
+    turning the scores into probabilities (a softmax). It was trained end-to-end
+    with <strong>REINFORCE and a greedy-rollout baseline</strong> — the same recipe
+    behind neural combinatorial optimisers — implemented in pure NumPy so it
+    deploys without a deep-learning framework.
+</p>
+
+{% if error %}
+<div class="alert alert-warning border"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>
+{% endif %}
+
+{% if plan %}
+<!-- Scorecards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Neural tour</h6>
+                <i class="bi bi-signpost-split text-primary"></i></div>
+            <div class="stat-value text-primary-dark">{{ plan.length_km }} km</div>
+            <div class="small text-muted">{{ plan.stops }} stops from {{ hub.name }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">vs nearest-neighbour</h6>
+                <i class="bi bi-graph-down-arrow text-success"></i></div>
+            <div class="stat-value {{ 'text-success' if plan.improvement_vs_nn_pct >= 0 else 'text-danger' }}">
+                {{ '%+.1f'|format(plan.improvement_vs_nn_pct) }}%</div>
+            <div class="small text-muted">{{ plan.baselines.nearest_neighbour_km }} km greedy baseline</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Gap to 2-opt</h6>
+                <i class="bi bi-bullseye text-warning"></i></div>
+            <div class="stat-value text-primary-dark">{{ plan.gap_vs_two_opt_pct }}%</div>
+            <div class="small text-muted">{{ plan.baselines.two_opt_km }} km local-search optimum</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Avg. confidence</h6>
+                <i class="bi bi-check2-circle text-primary"></i></div>
+            <div class="stat-value text-primary-dark">{{ (plan.avg_confidence * 100)|round(0)|int }}%</div>
+            <div class="small text-muted">mean pointer probability per pick</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Map -->
+    <div class="col-lg-7">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-map"></i> Planned route</h6>
+                <div class="small">
+                    <span class="badge" style="background:#0d3b66">Neural</span>
+                    <span class="badge bg-secondary">Nearest-neighbour</span>
+                </div>
+            </div>
+            <div id="map" style="height: 460px; border-radius: 12px;"></div>
+        </div>
+    </div>
+
+    <!-- Ordered stops with reasoning -->
+    <div class="col-lg-5">
+        <div class="card card-soft p-3 h-100">
+            <h6 class="fw-bold mb-3"><i class="bi bi-list-ol"></i> Pick order &amp; reasoning</h6>
+            <div class="router-steps">
+                {% for o in ordered %}
+                <div class="d-flex gap-2 mb-3">
+                    <span class="seq-pill">{{ o.sequence }}</span>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-semibold">{{ o.shipment.tracking_number }}</span>
+                            <span class="small text-muted">{{ o.leg_km }} km leg</span>
+                        </div>
+                        <div class="small text-muted">{{ o.shipment.receiver_name }}
+                            {% if o.shipment.district %}· {{ o.shipment.district }}{% endif %}</div>
+                        <div class="mt-1">
+                            <span class="badge bg-light text-dark border">
+                                {{ (o.probability * 100)|round(0)|int }}% confident</span>
+                            {% for r in o.reasons %}
+                            <span class="badge {{ 'bg-success-subtle text-success-emphasis' if r.weight >= 0 else 'bg-danger-subtle text-danger-emphasis' }} border">
+                                {{ r.label }} ({{ '%+.2f'|format(r.weight) }})</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if metrics %}
+<!-- Training story -->
+<div class="row g-4 mt-1">
+    <div class="col-lg-7">
+        <div class="card card-soft p-3 h-100">
+            <h6 class="fw-bold mb-1"><i class="bi bi-activity"></i> Training curve</h6>
+            <div class="small text-muted mb-2">
+                Optimality gap to the 2-opt optimum over {{ metrics.iterations }} REINFORCE
+                iterations (validation set, best-of-N sampled decoding).</div>
+            <canvas id="curveChart" height="150"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card card-soft p-3 h-100">
+            <h6 class="fw-bold mb-1"><i class="bi bi-sliders"></i> Learned attention weights</h6>
+            <div class="small text-muted mb-2">
+                What the policy learned to value when scoring the next stop.
+                Negative = "prefer smaller", positive = "prefer larger".</div>
+            <canvas id="weightChart" height="180"></canvas>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if plan %}
+<script>
+    const depot = {{ hub.coords|tojson }};
+    const stopCoords = {{ stops|map(attribute='coords')|list|tojson }};
+    const stopMeta = [
+        {% for s in stops %}{ t: {{ s.tracking_number|tojson }}, r: {{ s.receiver_name|tojson }} },{% endfor %}
+    ];
+    const neuralOrder = {{ plan.order|tojson }};
+    const nnOrder = {{ plan.baselines.nearest_neighbour_order|tojson }};
+
+    const map = L.map('map').setView(depot, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+    const hubIcon = L.divIcon({ html: '<i class="bi bi-house-fill" style="font-size:24px;color:#0d3b66"></i>', className: '', iconSize: [24, 24] });
+    const bounds = [depot];
+    L.marker(depot, { icon: hubIcon }).addTo(map).bindPopup("<b>{{ hub.name }}</b><br>Hub");
+
+    // Nearest-neighbour baseline (grey, dashed).
+    const nnPts = [depot].concat(nnOrder.map(i => stopCoords[i]));
+    L.polyline(nnPts, { color: '#94a3b8', weight: 3, opacity: .7, dashArray: '6,8' }).addTo(map);
+
+    // Neural route (navy, solid) with numbered stops.
+    const neuralPts = [depot].concat(neuralOrder.map(i => stopCoords[i]));
+    L.polyline(neuralPts, { color: '#0d3b66', weight: 5, opacity: .9 }).addTo(map);
+    neuralOrder.forEach((idx, seq) => {
+        const c = stopCoords[idx];
+        bounds.push(c);
+        L.circleMarker(c, { radius: 11, color: '#0d3b66', fillColor: '#fff', fillOpacity: 1, weight: 2 })
+            .addTo(map)
+            .bindTooltip(String(seq + 1), { permanent: true, direction: 'center', className: 'seq-badge' })
+            .bindPopup("<b>" + stopMeta[idx].t + "</b><br>" + stopMeta[idx].r);
+    });
+    if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+</script>
+{% if metrics %}
+<script>
+    const curve = {{ metrics.learning_curve_gap_pct|tojson }};
+    new Chart(document.getElementById('curveChart'), {
+        type: 'line',
+        data: {
+            labels: curve.map((_, i) => i === 0 ? 'start' : 'ckpt ' + i),
+            datasets: [{
+                label: 'Gap to 2-opt (%)', data: curve, tension: .3,
+                borderColor: '#0d3b66', backgroundColor: 'rgba(13,59,102,.1)', fill: true,
+            }]
+        },
+        options: { plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, title: { display: true, text: '% gap' } } } }
+    });
+
+    const weights = {{ metrics.weights|tojson }};
+    const wl = Object.keys(weights);
+    new Chart(document.getElementById('weightChart'), {
+        type: 'bar',
+        data: {
+            labels: wl,
+            datasets: [{
+                label: 'weight', data: wl.map(k => weights[k]),
+                backgroundColor: wl.map(k => weights[k] >= 0 ? '#2a9d8f' : '#e76f51'),
+            }]
+        },
+        options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+    });
+</script>
+{% endif %}
+{% endif %}
+<style>
+    .seq-badge { background: #0d3b66; border: none; box-shadow: none; color: #fff; font-weight: 700; font-size: 11px; border-radius: 10px; padding: 0 6px; }
+    .seq-badge::before { display: none; }
+    .seq-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; border-radius: 8px; background: #0d3b66; color: #fff; font-weight: 700; font-size: 13px; }
+    .router-steps { max-height: 460px; overflow-y: auto; }
+</style>
+{% endblock %}

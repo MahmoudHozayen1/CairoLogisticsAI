@@ -26,6 +26,8 @@
             </a>
         </div>
 
+        {% include "partials/_note_analysis.html" with context %}
+
         <div class="card card-soft p-0"><div id="map" class="map-box"></div></div>
     </div>
 
@@ -34,9 +36,16 @@
             <h6 class="fw-bold mb-3">Complete delivery</h6>
             <form action="{{ url_for('courier.mark_delivered', shipment_id=s.id) }}" method="POST" enctype="multipart/form-data">
                 {{ form.hidden_tag() }}
+                {{ form.deliver_lat(type="hidden", id="deliver_lat") }}
+                {{ form.deliver_lon(type="hidden", id="deliver_lon") }}
                 <div class="mb-2">{{ form.note.label(class="form-label") }}{{ form.note(class="form-control form-control-sm", placeholder="e.g. handed to receiver") }}</div>
                 <div class="mb-3">{{ form.proof.label(class="form-label") }}{{ form.proof(class="form-control form-control-sm") }}
                     {% for e in form.proof.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+                <div class="d-flex align-items-center gap-2 mb-3 small">
+                    <button type="button" id="gpsBtn" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-crosshair"></i> Capture GPS</button>
+                    <span id="gpsStatus" class="text-muted">Confirms delivery location for the audit trail.</span>
+                </div>
                 <button class="btn btn-success w-100"><i class="bi bi-check2-circle"></i> Mark delivered</button>
             </form>
             <hr>
@@ -62,5 +71,35 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     L.marker([{{ s.lat }}, {{ s.lon }}]).addTo(map).bindPopup("{{ s.receiver_name }}").openPopup();
     setTimeout(() => map.invalidateSize(), 200);
+
+    // GIS delivery confirmation: capture the courier's current position so the
+    // server can geofence it against the destination. Optional — the form still
+    // submits without it (the server simulates a nearby point).
+    (function () {
+        const btn = document.getElementById('gpsBtn');
+        const status = document.getElementById('gpsStatus');
+        const latEl = document.getElementById('deliver_lat');
+        const lonEl = document.getElementById('deliver_lon');
+        if (!btn || !navigator.geolocation) {
+            if (btn) { btn.disabled = true; status.textContent = 'GPS not available on this device.'; }
+            return;
+        }
+        const capture = () => {
+            status.textContent = 'Locating…';
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    latEl.value = pos.coords.latitude.toFixed(6);
+                    lonEl.value = pos.coords.longitude.toFixed(6);
+                    status.innerHTML = '<span class="text-success">Location captured \u2713</span>';
+                    L.circleMarker([pos.coords.latitude, pos.coords.longitude],
+                        {radius: 6, color: '#2e9e5b'}).addTo(map).bindPopup('Your location');
+                },
+                () => { status.innerHTML = '<span class="text-warning">GPS denied — will estimate.</span>'; },
+                {enableHighAccuracy: true, timeout: 8000}
+            );
+        };
+        btn.addEventListener('click', capture);
+        capture();  // attempt once on load
+    })();
 </script>
 {% endblock %}

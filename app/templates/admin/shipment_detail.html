@@ -46,9 +46,113 @@
             <img src="{{ url_for('static', filename='uploads/' ~ s.proof_image) }}" class="img-fluid rounded" alt="Proof of delivery">
         </div>
         {% endif %}
+
+        {% if chain and chain.count %}
+        <div class="card card-soft p-4 mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-primary"></i> Chain of custody</h6>
+                {% if chain.ok %}
+                <span class="badge bg-success"><i class="bi bi-check-lg"></i> Verified · untampered</span>
+                {% else %}
+                <span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Integrity broken</span>
+                {% endif %}
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for item in chain.records %}
+                {% set r = item.record %}
+                <li class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge bg-primary-subtle text-primary me-1">#{{ r.sequence }}</span>
+                            <span class="fw-bold small">{{ r.stage_label }}</span>
+                            <div class="small text-muted">{{ r.from_party }} &rarr; {{ r.to_party }}
+                                · by {{ r.actor }}</div>
+                            <div class="text-muted" style="font-size:.72rem;">
+                                {{ r.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% if r.location %}· {{ r.location }}{% endif %}</div>
+                            <code class="text-muted" style="font-size:.66rem;">{{ r.record_hash[:16] }}…</code>
+                        </div>
+                        <span class="badge {{ 'bg-success-subtle text-success' if item.valid else 'bg-danger-subtle text-danger' }}">
+                            {{ 'ok' if item.valid else 'altered' }}</span>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if confirmation %}
+        <div class="card card-soft p-4 mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-geo-alt-fill text-danger"></i> GIS delivery confirmation</h6>
+                {% if confirmation.verified %}
+                <span class="badge bg-success"><i class="bi bi-check-lg"></i> Inside geofence</span>
+                {% else %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Outside geofence</span>
+                {% endif %}
+            </div>
+            <div class="row text-center g-2 mb-3">
+                <div class="col-4"><div class="small text-muted">Distance</div>
+                    <strong>{{ confirmation.distance_m|round(0)|int }} m</strong></div>
+                <div class="col-4"><div class="small text-muted">Geofence</div>
+                    <strong>{{ confirmation.radius_m }} m</strong></div>
+                <div class="col-4"><div class="small text-muted">Source</div>
+                    <strong class="text-capitalize">{{ confirmation.source }}</strong></div>
+            </div>
+            <div id="gisMap" class="map-box" style="height:220px;border-radius:.5rem;"></div>
+        </div>
+        {% endif %}
     </div>
 
     <div class="col-lg-5">
+        {% if predictions %}
+        {% set lb = predictions.late.band %}
+        {% set late_color = 'danger' if lb == 'high' else ('warning' if lb == 'medium' else 'success') %}
+        <div class="card card-soft p-4 mb-4 border-start border-4 border-info">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-cpu text-info"></i> AI predictions</h6>
+                <a href="{{ url_for('admin.ai_overview') }}" class="small text-muted">models &raquo;</a>
+            </div>
+            <div class="row text-center g-2 mb-3">
+                <div class="col-4">
+                    <div class="small text-muted">Pickup</div>
+                    <div class="fs-5 fw-bold text-primary-dark">{{ predictions.pickup.minutes }}<span class="fs-6 text-muted"> min</span></div>
+                </div>
+                <div class="col-4">
+                    <div class="small text-muted">Drop-off</div>
+                    <div class="fs-5 fw-bold text-primary-dark">{{ predictions.dropoff.minutes }}<span class="fs-6 text-muted"> min</span></div>
+                </div>
+                <div class="col-4">
+                    <div class="small text-muted">Late risk</div>
+                    <div class="fs-5 fw-bold text-{{ late_color }}">{{ predictions.late.percent }}<span class="fs-6">%</span></div>
+                </div>
+            </div>
+            <div class="progress mb-3" style="height:8px;">
+                <div class="progress-bar bg-{{ late_color }}" style="width: {{ predictions.late.percent }}%"></div>
+            </div>
+
+            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.68rem;">Why — drop-off time</div>
+            <ul class="list-unstyled small mb-3">
+                {% for r in predictions.dropoff.reasons[:3] %}
+                <li class="d-flex justify-content-between">
+                    <span>{{ r.label }} <span class="text-muted">({{ r.value }})</span></span>
+                    <span class="{{ 'text-danger' if r.contribution > 0 else 'text-success' }}">{{ '%+.1f'|format(r.contribution) }} min</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size:.68rem;">Why — late risk</div>
+            <ul class="list-unstyled small mb-0">
+                {% for r in predictions.late.reasons[:3] %}
+                <li class="d-flex justify-content-between">
+                    <span>{{ r.label }} <span class="text-muted">({{ r.value }})</span></span>
+                    <span class="{{ 'text-danger' if r.contribution > 0 else 'text-success' }}">
+                        {{ 'raises risk' if r.contribution > 0 else 'lowers risk' }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% include "partials/_note_analysis.html" with context %}
         <div class="card card-soft p-4 mb-4">
             <h6 class="fw-bold mb-3">Update status</h6>
             <form action="{{ url_for('admin.update_status', shipment_id=s.id) }}" method="POST">
@@ -89,5 +193,22 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     L.marker([{{ s.lat }}, {{ s.lon }}]).addTo(map).bindPopup("{{ s.receiver_name }}").openPopup();
     setTimeout(() => map.invalidateSize(), 200);
+
+    {% if confirmation %}
+    const gis = L.map('gisMap').setView([{{ confirmation.dest_lat }}, {{ confirmation.dest_lon }}], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(gis);
+    // Destination + geofence
+    L.marker([{{ confirmation.dest_lat }}, {{ confirmation.dest_lon }}]).addTo(gis).bindPopup('Destination');
+    L.circle([{{ confirmation.dest_lat }}, {{ confirmation.dest_lon }}], {
+        radius: {{ confirmation.radius_m }}, color: '#1f6fa5', weight: 1, fillOpacity: 0.08}).addTo(gis);
+    // Confirmed delivery point
+    L.circleMarker([{{ confirmation.lat }}, {{ confirmation.lon }}], {
+        radius: 7, color: '{{ '#2e9e5b' if confirmation.verified else '#e67e22' }}',
+        fillColor: '{{ '#2e9e5b' if confirmation.verified else '#e67e22' }}', fillOpacity: 0.9})
+        .addTo(gis).bindPopup('Confirmed delivery');
+    L.polyline([[{{ confirmation.dest_lat }}, {{ confirmation.dest_lon }}],
+        [{{ confirmation.lat }}, {{ confirmation.lon }}]], {color: '#888', dashArray: '4,4'}).addTo(gis);
+    setTimeout(() => gis.invalidateSize(), 250);
+    {% endif %}
 </script>
 {% endblock %}

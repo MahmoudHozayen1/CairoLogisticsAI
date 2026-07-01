@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Feedback Loop{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-arrow-repeat"></i> Learning Feedback Loop</h3>
+    <a href="{{ url_for('admin.ai_overview') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back to AI</a>
+</div>
+
+{% if not trained or not report %}
+<div class="card card-soft p-5 text-center">
+    <i class="bi bi-robot display-4 text-muted mb-3"></i>
+    <h5 class="fw-bold">No feedback available yet</h5>
+    <p class="text-muted mb-0">Train the predictive models first, then this page compares every
+        prediction against the actual outcome to measure accuracy, drift and calibration.</p>
+</div>
+{% else %}
+
+<p class="text-muted small mb-3">
+    Predictions replayed against <strong>{{ '{:,}'.format(report.n_rows) }}</strong> historical
+    deliveries with known outcomes (backtest), plus <strong>{{ report.live.resolved }}</strong>
+    resolved live predictions. This is what triggers a retrain when error drifts.
+</p>
+
+<!-- Headline scorecards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Drop-off error</h6>
+                <i class="bi bi-geo-alt text-primary"></i></div>
+            <div class="stat-value text-primary-dark">±{{ report.dropoff.mae }} min</div>
+            <div class="small text-muted">bias {{ '%+.1f'|format(report.dropoff.bias) }} min · R² {{ report.dropoff.r2 }}</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Pickup error</h6>
+                <i class="bi bi-shop text-primary"></i></div>
+            <div class="stat-value text-primary-dark">±{{ report.pickup.mae }} min</div>
+            <div class="small text-muted">bias {{ '%+.1f'|format(report.pickup.bias) }} min · R² {{ report.pickup.r2 }}</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Late calibration</h6>
+                <i class="bi bi-clock-history text-danger"></i></div>
+            <div class="stat-value text-primary-dark">{{ report.calibration.brier }}</div>
+            <div class="small text-muted">Brier score · base {{ (report.calibration.base_rate * 100)|round(0)|int }}% late</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100 {{ 'border border-danger' if report.drift.drift_flag else '' }}">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Drift signal</h6>
+                <i class="bi bi-activity {{ 'text-danger' if report.drift.drift_flag else 'text-success' }}"></i></div>
+            <div class="stat-value {{ 'text-danger' if report.drift.drift_flag else 'text-success' }}">
+                {{ '%+.1f'|format(report.drift.delta_pct) }}%</div>
+            <div class="small text-muted">recent vs baseline drop-off error</div>
+        </div>
+    </div>
+</div>
+
+{% if report.drift.drift_flag %}
+<div class="alert alert-warning d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <div>Recent drop-off error (±{{ report.drift.recent_mae }} min) is more than 25% above the
+        baseline (±{{ report.drift.baseline_mae }} min). Consider retraining with fresh data.</div>
+</div>
+{% else %}
+<div class="alert alert-success d-flex align-items-center gap-2">
+    <i class="bi bi-check-circle-fill"></i>
+    <div>Model error is stable over time (recent ±{{ report.drift.recent_mae }} min vs baseline
+        ±{{ report.drift.baseline_mae }} min). No retrain needed.</div>
+</div>
+{% endif %}
+
+<!-- Charts -->
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="fw-bold mb-3">Weekly drop-off error (drift monitor)</h6>
+            <canvas id="driftChart" height="150"></canvas>
+        </div>
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Prediction error distribution (predicted − actual, minutes)</h6>
+            <canvas id="residChart" height="130"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="fw-bold mb-3">Late-risk calibration</h6>
+            <canvas id="calibChart" height="180"></canvas>
+            <div class="small text-muted mt-2">Points on the diagonal mean predicted probabilities
+                match observed late rates.</div>
+        </div>
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-broadcast text-primary"></i> Live loop</h6>
+            <ul class="list-group list-group-flush small">
+                <li class="list-group-item px-0 d-flex justify-content-between">
+                    <span>Predictions logged</span><strong>{{ report.live.logged }}</strong></li>
+                <li class="list-group-item px-0 d-flex justify-content-between">
+                    <span>Resolved (actual known)</span><strong>{{ report.live.resolved }}</strong></li>
+                <li class="list-group-item px-0 d-flex justify-content-between">
+                    <span>Live drop-off error</span>
+                    <strong>{{ ('±%s min'|format(report.live.dropoff_mae)) if report.live.dropoff_mae is not none else '—' }}</strong></li>
+                <li class="list-group-item px-0 d-flex justify-content-between">
+                    <span>Live late Brier</span>
+                    <strong>{{ report.live.late_brier if report.live.late_brier is not none else '—' }}</strong></li>
+            </ul>
+            <div class="small text-muted mt-2">Populated as couriers complete live deliveries.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const FB = {{ chart|tojson }};
+new Chart(document.getElementById('driftChart'), {
+    type: 'line',
+    data: { labels: FB.drift_labels, datasets: [
+        {label: 'Weekly MAE (min)', data: FB.drift_mae, borderColor: '#1f6fa5',
+            backgroundColor: 'rgba(31,111,165,0.12)', tension: 0.25, pointRadius: 2, fill: true, borderWidth: 2},
+        {label: 'Baseline', data: FB.drift_labels.map(() => FB.drift_baseline),
+            borderColor: '#e67e22', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5},
+    ]},
+    options: {interaction: {mode: 'index', intersect: false}, scales: {y: {beginAtZero: true}}}
+});
+new Chart(document.getElementById('residChart'), {
+    type: 'bar',
+    data: { labels: FB.residual_centers, datasets: [
+        {label: 'Deliveries', data: FB.residual_counts, backgroundColor: 'rgba(31,111,165,0.55)'},
+    ]},
+    options: {plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true}}}
+});
+new Chart(document.getElementById('calibChart'), {
+    type: 'scatter',
+    data: { datasets: [
+        {label: 'Model', data: FB.calib_predicted.map((p, i) => ({x: p, y: FB.calib_observed[i]})),
+            borderColor: '#1f6fa5', backgroundColor: '#1f6fa5', pointRadius: 4},
+        {label: 'Perfect', type: 'line', data: [{x: 0, y: 0}, {x: 1, y: 1}],
+            borderColor: '#e67e22', borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5},
+    ]},
+    options: {scales: {x: {min: 0, max: 1, title: {display: true, text: 'Predicted'}},
+        y: {min: 0, max: 1, title: {display: true, text: 'Observed'}}}}
+});
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Operations Assistant{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-chat-dots"></i> Operations Assistant</h3>
+    <span class="badge rounded-pill {{ 'bg-success' if llm_enabled else 'bg-secondary' }}">
+        <i class="bi bi-{{ 'stars' if llm_enabled else 'hdd-network' }}"></i>
+        {{ 'LLM-assisted (Ollama, when reachable)' if llm_enabled else 'Offline retrieval mode' }}
+    </span>
+</div>
+
+<p class="text-muted small mb-3">
+    Ask about shipments, late-delivery risk, the demand forecast, courier workload,
+    a tracking number, audit integrity, handling notes or model accuracy. Every answer
+    lists the exact data it was built from — and works even with no LLM installed.
+</p>
+
+<div class="d-flex flex-wrap gap-2 mb-3" id="suggestions">
+    {% for s in suggestions %}
+    <button type="button" class="btn btn-sm btn-outline-primary suggestion-chip">{{ s }}</button>
+    {% endfor %}
+</div>
+
+<div class="card card-soft">
+    <div class="card-body p-3 p-md-4" id="chatLog" style="min-height:320px;max-height:55vh;overflow-y:auto;">
+        <div class="text-center text-muted small py-5" id="chatEmpty">
+            <i class="bi bi-robot display-6 d-block mb-2"></i>
+            Ask a question or pick a suggestion to begin.
+        </div>
+    </div>
+    <div class="card-footer bg-white border-top">
+        <form id="chatForm" class="d-flex gap-2" autocomplete="off">
+            <input type="text" id="chatInput" class="form-control" placeholder="Ask the assistant…" required>
+            <button class="btn btn-accent" type="submit" id="chatSend">
+                <i class="bi bi-send"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<template id="userMsgTpl">
+    <div class="d-flex justify-content-end mb-3">
+        <div class="p-2 px-3 rounded-3 bg-primary text-white" style="max-width:80%;"></div>
+    </div>
+</template>
+
+<template id="botMsgTpl">
+    <div class="d-flex justify-content-start mb-3">
+        <div class="p-3 rounded-3 bg-light border" style="max-width:88%;">
+            <div class="bot-answer"></div>
+            <div class="mt-2 bot-sources"></div>
+            <div class="mt-1 small text-muted bot-meta"></div>
+        </div>
+    </div>
+</template>
+
+<script>
+(function () {
+    const askUrl = "{{ url_for('admin.assistant_ask') }}";
+    const csrf = "{{ csrf_token() }}";
+    const log = document.getElementById('chatLog');
+    const empty = document.getElementById('chatEmpty');
+    const form = document.getElementById('chatForm');
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSend');
+
+    function scroll() { log.scrollTop = log.scrollHeight; }
+
+    function addUser(text) {
+        if (empty) empty.remove();
+        const node = document.getElementById('userMsgTpl').content.cloneNode(true);
+        node.querySelector('div > div').textContent = text;
+        log.appendChild(node);
+        scroll();
+    }
+
+    function addBot(data) {
+        const node = document.getElementById('botMsgTpl').content.cloneNode(true);
+        node.querySelector('.bot-answer').textContent = data.answer || '…';
+        const src = node.querySelector('.bot-sources');
+        if (data.sources && data.sources.length) {
+            const det = document.createElement('details');
+            const sum = document.createElement('summary');
+            sum.className = 'small text-primary';
+            sum.style.cursor = 'pointer';
+            sum.textContent = 'Sources / reasoning (' + data.sources.length + ')';
+            det.appendChild(sum);
+            const ul = document.createElement('ul');
+            ul.className = 'small text-muted mb-0 mt-1';
+            data.sources.forEach(function (s) {
+                const li = document.createElement('li');
+                li.textContent = s;
+                ul.appendChild(li);
+            });
+            det.appendChild(ul);
+            src.appendChild(det);
+        }
+        const meta = node.querySelector('.bot-meta');
+        const badge = data.used_llm ? 'LLM-phrased over retrieved facts'
+                                    : 'Deterministic DB retrieval';
+        meta.textContent = '● ' + badge + (data.intent ? ' · intent: ' + data.intent : '');
+        log.appendChild(node);
+        scroll();
+    }
+
+    function addTyping() {
+        const wrap = document.createElement('div');
+        wrap.className = 'text-muted small mb-3 typing';
+        wrap.innerHTML = '<i class="bi bi-three-dots"></i> thinking…';
+        log.appendChild(wrap);
+        scroll();
+        return wrap;
+    }
+
+    async function ask(question) {
+        addUser(question);
+        input.value = '';
+        sendBtn.disabled = true;
+        const typing = addTyping();
+        try {
+            const resp = await fetch(askUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ question: question })
+            });
+            const data = await resp.json();
+            typing.remove();
+            addBot(data);
+        } catch (e) {
+            typing.remove();
+            addBot({ answer: 'Network error — please try again.', sources: [] });
+        } finally {
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const q = input.value.trim();
+        if (q) ask(q);
+    });
+
+    document.querySelectorAll('.suggestion-chip').forEach(function (btn) {
+        btn.addEventListener('click', function () { ask(btn.textContent.trim()); });
+    });
+})();
+</script>
+{% endblock %}

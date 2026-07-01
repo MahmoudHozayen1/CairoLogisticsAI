@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-from flask import render_template, redirect, url_for, flash, request, jsonify
+from flask import render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
 from sqlalchemy import func
 
@@ -10,6 +10,7 @@ from ...extensions import db
 from ...forms import HubForm, CourierForm, RoadClosureForm, AdminShipmentForm
 from ...models import (
     User, Hub, Shipment, RouteStop, RoadClosure, ShipmentStatus, Role,
+    DeliveryConfirmation,
 )
 from ...utils import role_required, generate_tracking_number
 from ...routing import (
@@ -451,6 +452,7 @@ def create_shipment():
             package_description=form.package_description.data,
             weight_kg=form.weight_kg.data or 1.0,
             cod_amount=form.cod_amount.data or 0.0,
+            delivery_notes=(form.delivery_notes.data or "").strip() or None,
             status=ShipmentStatus.PENDING,
         )
         shipment.add_event(ShipmentStatus.PENDING, note="Shipment created by admin", user=current_user)
@@ -477,13 +479,58 @@ def _nearest_hub_id(coords):
     return min(hubs, key=lambda h: haversine_km(coords, h.coords)).id
 
 
+def _log_dispatch(shipment):
+    """Log predictions when a shipment goes out for delivery (feedback loop)."""
+    try:
+        from ...ml.feedback import log_predictions
+        log_predictions(shipment)
+    except Exception:  # pragma: no cover - never block dispatch
+        db.session.rollback()
+
+
+def _resolve_delivery(shipment):
+    """Close the feedback loop and record a GIS confirmation on completion."""
+    try:
+        from ...ml.feedback import resolve_predictions
+        resolve_predictions(shipment)
+    except Exception:  # pragma: no cover
+        db.session.rollback()
+    try:
+        from ...audit import confirm_delivery_location
+        if shipment.delivery_confirmation is None:
+            confirm_delivery_location(shipment)  # no admin GPS -> simulated
+    except Exception:  # pragma: no cover
+        db.session.rollback()
+
+
 @bp.route("/shipments/<int:shipment_id>")
 @login_required
 @admin_only
 def shipment_detail(shipment_id):
     shipment = db.get_or_404(Shipment, shipment_id)
     couriers = User.query.filter_by(role=Role.COURIER, is_active=True).all()
-    return render_template("admin/shipment_detail.html", s=shipment, couriers=couriers)
+    predictions = None
+    from ...ml import get_service
+    svc = get_service()
+    if svc.is_trained:
+        try:
+            predictions = svc.predict_all(shipment)
+        except Exception as exc:  # pragma: no cover - defensive, never block the page
+            current_app.logger.warning("AI prediction failed for %s: %s",
+                                       shipment.tracking_number, exc)
+    note_analysis = None
+    if shipment.delivery_notes:
+        try:
+            note_analysis = svc.analyze_note(shipment.delivery_notes)
+        except Exception as exc:  # pragma: no cover - defensive
+            current_app.logger.warning("Note analysis failed for %s: %s",
+                                       shipment.tracking_number, exc)
+    from ...audit import verify_chain
+    chain = verify_chain(shipment)
+    return render_template("admin/shipment_detail.html", s=shipment,
+                           couriers=couriers, predictions=predictions,
+                           chain=chain, confirmation=shipment.delivery_confirmation,
+                           note_analysis=note_analysis)
 
 
 @bp.route("/shipments/<int:shipment_id>/status", methods=["POST"])
@@ -499,6 +546,11 @@ def update_status(shipment_id):
         if new_status == ShipmentStatus.DELIVERED:
             shipment.delivered_at = datetime.now(timezone.utc)
         shipment.add_event(new_status, note=note, user=current_user)
+        db.session.flush()
+        if new_status == ShipmentStatus.OUT_FOR_DELIVERY:
+            _log_dispatch(shipment)
+        elif new_status == ShipmentStatus.DELIVERED:
+            _resolve_delivery(shipment)
         db.session.commit()
         flash("Status updated.", "success")
     else:
@@ -521,6 +573,300 @@ def assign_courier(shipment_id):
                 note=f"Manually assigned to {courier.name}",
                 user=current_user,
             )
+            db.session.flush()
+            _log_dispatch(shipment)
         db.session.commit()
         flash(f"Assigned to {courier.name}.", "success")
     return redirect(url_for("admin.shipment_detail", shipment_id=shipment_id))
+
+
+# --------------------------------------------------------------------------- #
+#  AI / Data-science dashboard
+# --------------------------------------------------------------------------- #
+def _forecast_chart(fc, window=60):
+    """Assemble Chart.js-friendly actual + forecast series (orders & cost)."""
+    hist_dates = fc["history"]["dates"][-window:]
+    hist_orders = fc["history"]["orders"][-window:]
+    hist_cost = fc["history"]["cost"][-window:]
+    future = fc["future_dates"]
+    n_hist, n_future = len(hist_dates), len(future)
+
+    labels = [d[5:] for d in hist_dates] + [d[5:] for d in future]  # MM-DD
+    pad = [None] * n_hist
+
+    def series(actual, block):
+        forecast = pad[:] + block["point"]
+        # bridge the dashed forecast line to the last actual point
+        if n_hist:
+            forecast[n_hist - 1] = actual[-1]
+        return {
+            "actual": actual + [None] * n_future,
+            "forecast": forecast,
+            "lower": pad[:] + block["lower"],
+            "upper": pad[:] + block["upper"],
+        }
+
+    return {
+        "labels": labels,
+        "orders": series(hist_orders, fc["orders"]),
+        "cost": series(hist_cost, fc["cost"]),
+    }
+
+
+@bp.route("/ai")
+@login_required
+@admin_only
+def ai_overview():
+    from ...ml import get_service
+    svc = get_service()
+    trained = svc.is_trained
+    metrics = forecast = chart = None
+    if trained:
+        metrics = svc.model_cards()
+        forecast = svc.forecast(horizon=14)
+        chart = _forecast_chart(forecast)
+    return render_template(
+        "admin/ai.html", trained=trained, metrics=metrics,
+        forecast=forecast, chart=chart,
+    )
+
+
+@bp.route("/ai/train", methods=["POST"])
+@login_required
+@admin_only
+def ai_train():
+    from ...ml import get_service
+    regenerate = bool(request.form.get("regenerate"))
+    try:
+        get_service().ensure_trained(force=regenerate)
+        flash("Predictive models trained successfully.", "success")
+    except Exception as exc:  # pragma: no cover - surfaced to the admin
+        current_app.logger.exception("Model training failed")
+        flash(f"Training failed: {exc}", "danger")
+    return redirect(url_for("admin.ai_overview"))
+
+
+def _feedback_chart(report):
+    """Chart.js series for the drift line and late-risk calibration curve."""
+    drift = report["drift"]
+    calib = report["calibration"]["bins"]
+    return {
+        "drift_labels": drift["weeks"],
+        "drift_mae": drift["mae"],
+        "drift_baseline": drift["baseline_mae"],
+        "residual_centers": report["residuals"]["centers"],
+        "residual_counts": report["residuals"]["counts"],
+        "calib_predicted": [b["predicted"] for b in calib],
+        "calib_observed": [b["observed"] for b in calib],
+    }
+
+
+@bp.route("/ai/feedback")
+@login_required
+@admin_only
+def ai_feedback():
+    from ...ml import get_service
+    svc = get_service()
+    trained = svc.is_trained
+    report = chart = None
+    if trained:
+        try:
+            from ...ml.feedback import feedback_report
+            report = feedback_report()
+            chart = _feedback_chart(report)
+        except Exception as exc:  # pragma: no cover
+            current_app.logger.exception("Feedback report failed")
+            flash(f"Feedback report unavailable: {exc}", "warning")
+    return render_template(
+        "admin/feedback.html", trained=trained, report=report, chart=chart,
+    )
+
+
+# --------------------------------------------------------------------------- #
+#  Chain-of-custody audit
+# --------------------------------------------------------------------------- #
+@bp.route("/audit")
+@login_required
+@admin_only
+def audit_overview():
+    from ...audit import verify_chain
+    recent = (
+        Shipment.query.filter(Shipment.status.in_([
+            ShipmentStatus.DELIVERED, ShipmentStatus.OUT_FOR_DELIVERY,
+            ShipmentStatus.RETURNED, ShipmentStatus.FAILED,
+        ]))
+        .order_by(Shipment.id.desc())
+        .limit(40)
+        .all()
+    )
+    rows, intact, broken, total_handoffs = [], 0, 0, 0
+    for s in recent:
+        chain = verify_chain(s)
+        if chain["count"] == 0:
+            continue
+        total_handoffs += chain["count"]
+        if chain["ok"]:
+            intact += 1
+        else:
+            broken += 1
+        rows.append({"shipment": s, "chain": chain})
+    confirmed = DeliveryConfirmation.query.filter_by(verified=True).count()
+    unverified = DeliveryConfirmation.query.filter_by(verified=False).count()
+    stats = {
+        "chains": len(rows),
+        "intact": intact,
+        "broken": broken,
+        "handoffs": total_handoffs,
+        "confirmed": confirmed,
+        "unverified": unverified,
+    }
+    return render_template("admin/audit.html", rows=rows, stats=stats)
+
+
+# --------------------------------------------------------------------------- #
+#  Operations assistant (chatbot)
+# --------------------------------------------------------------------------- #
+@bp.route("/assistant")
+@login_required
+@admin_only
+def assistant():
+    from ...ml.assistant import SUGGESTIONS
+    llm = current_app.config.get("ASSISTANT_USE_LLM")
+    return render_template(
+        "admin/assistant.html", suggestions=SUGGESTIONS, llm_enabled=llm)
+
+
+@bp.route("/assistant/ask", methods=["POST"])
+@login_required
+@admin_only
+def assistant_ask():
+    from ...ml.assistant import get_assistant
+    question = (request.json or {}).get("question", "") if request.is_json \
+        else request.form.get("question", "")
+    try:
+        result = get_assistant().answer(question, dict(current_app.config))
+    except Exception as exc:  # pragma: no cover - surfaced to the admin
+        current_app.logger.exception("Assistant failed")
+        return jsonify({"answer": f"Sorry, I hit an error: {exc}",
+                        "intent": "error", "sources": [], "used_llm": False}), 200
+    return jsonify(result)
+
+
+# --------------------------------------------------------------------------- #
+#  Learning-to-Route (neural pointer policy) demo
+# --------------------------------------------------------------------------- #
+@bp.route("/ai/router")
+@login_required
+@admin_only
+def ai_router():
+    """Run the learned pointer policy on a hub's warehouse queue and explain it."""
+    hubs = Hub.query.order_by(Hub.name).all()
+    hub_id = request.args.get("hub_id", type=int)
+    hub = db.session.get(Hub, hub_id) if hub_id else (hubs[0] if hubs else None)
+
+    plan = ordered = None
+    metrics = None
+    error = None
+    stops = []
+    if hub is not None:
+        stops = (
+            Shipment.query
+            .filter(
+                Shipment.hub_id == hub.id,
+                Shipment.status.in_([
+                    ShipmentStatus.AT_WAREHOUSE, ShipmentStatus.OUT_FOR_DELIVERY]),
+            )
+            .order_by(Shipment.id)
+            .limit(18)
+            .all()
+        )
+        if len(stops) >= 3:
+            try:
+                from ...ml import get_router
+                router = get_router()
+                points = [s.coords for s in stops]
+                plan = router.route(points, hub.coords)
+                metrics = router.metrics()
+                ordered = []
+                for seq, step in enumerate(plan["steps"], start=1):
+                    s = stops[step["stop_index"]]
+                    ordered.append({
+                        "sequence": seq,
+                        "shipment": s,
+                        "leg_km": step["leg_km"],
+                        "probability": step["probability"],
+                        "reasons": step["reasons"],
+                    })
+            except Exception as exc:  # pragma: no cover - surfaced to the admin
+                current_app.logger.exception("Neural router failed")
+                error = str(exc)
+        else:
+            error = ("Need at least 3 parcels out for delivery or at this hub to plan "
+                     "a route. Seed more data or receive parcels at the warehouse.")
+
+    return render_template(
+        "admin/router.html",
+        hubs=hubs, hub=hub, stops=stops, plan=plan, ordered=ordered,
+        metrics=metrics, error=error,
+    )
+
+
+# --------------------------------------------------------------------------- #
+#  Courier behaviour modelling (persona clustering) demo
+# --------------------------------------------------------------------------- #
+@bp.route("/ai/behavior")
+@login_required
+@admin_only
+def ai_behavior():
+    """Simulate each courier's shift, cluster into personas and explain it."""
+    from ...ml import get_behavior_model
+    from ...ml import behavior as bh
+
+    couriers = (
+        User.query
+        .filter_by(role=Role.COURIER, is_active=True)
+        .order_by(User.name)
+        .all()
+    )
+    sel_id = request.args.get("courier_id", type=int)
+
+    fleet = []
+    detail = None
+    metrics = None
+    error = None
+    try:
+        model = get_behavior_model()
+        metrics = model.metrics()
+        for c in couriers:
+            archetype = bh.ARCHETYPE_ORDER[c.id % len(bh.ARCHETYPE_ORDER)]
+            hub_coords = c.hub.coords if c.hub else bh.HUBS[0]
+            shift = bh.simulate_shift(archetype, seed=1000 + c.id, hub=hub_coords)
+            res = model.analyze(shift["trace"], shift["ideal_km"])
+            row = {
+                "courier": c,
+                "persona": res["persona"],
+                "score": res["productivity_score"],
+                "confidence": res["persona_confidence"],
+                "deliveries": res["summary"]["n_deliveries"],
+                "flags": res["flags"],
+            }
+            fleet.append(row)
+            if (sel_id and c.id == sel_id) or (not sel_id and detail is None):
+                detail = {"courier": c, "result": res}
+    except Exception as exc:  # pragma: no cover - surfaced to the admin
+        current_app.logger.exception("Behaviour model failed")
+        error = str(exc)
+
+    # Persona distribution across the demo fleet (for the donut chart).
+    distribution = {}
+    for row in fleet:
+        name = row["persona"]["name"]
+        distribution[name] = distribution.get(name, 0) + 1
+
+    return render_template(
+        "admin/behavior.html",
+        couriers=couriers, fleet=fleet, detail=detail,
+        distribution=distribution, metrics=metrics, error=error,
+    )
+
+

@@ -13,6 +13,8 @@ Entities
 """
 from datetime import datetime, timezone
 
+import hashlib
+
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -21,6 +23,36 @@ from .extensions import db, login_manager
 
 def utcnow():
     return datetime.now(timezone.utc)
+
+
+def naive_utcnow():
+    """Naive UTC timestamp (tz stripped) for values that must hash-compare
+    identically before and after a database round-trip (SQLite drops tzinfo)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# --------------------------------------------------------------------------- #
+#  Chain-of-custody handoff helpers
+# --------------------------------------------------------------------------- #
+# Which status transitions represent a custody handoff, and the default parties.
+HANDOFF_MAP = {
+    "at_warehouse": ("merchant_to_hub", "Merchant", "Hub"),
+    "out_for_delivery": ("hub_to_courier", "Hub", "Courier"),
+    "delivered": ("courier_to_customer", "Courier", "Customer"),
+    "returned": ("courier_to_hub_return", "Courier", "Hub"),
+}
+
+
+def handoff_payload(tracking_number, sequence, stage, from_party, to_party,
+                    created_at, prev_hash):
+    """Canonical string hashed for a handoff record (used by create + verify)."""
+    ts = created_at.isoformat(timespec="microseconds") if created_at else ""
+    return f"{tracking_number}|{sequence}|{stage}|{from_party}|{to_party}|{ts}|{prev_hash}"
+
+
+def handoff_hash(*args):
+    return hashlib.sha256(handoff_payload(*args).encode("utf-8")).hexdigest()
+
 
 
 # --------------------------------------------------------------------------- #
@@ -259,6 +291,18 @@ class Shipment(db.Model):
         "RouteStop", backref="shipment", uselist=False,
         cascade="all, delete-orphan",
     )
+    handoffs = db.relationship(
+        "HandoffRecord", backref="shipment", lazy="select",
+        cascade="all, delete-orphan", order_by="HandoffRecord.sequence",
+    )
+    delivery_confirmation = db.relationship(
+        "DeliveryConfirmation", backref="shipment", uselist=False,
+        cascade="all, delete-orphan",
+    )
+    predictions = db.relationship(
+        "PredictionLog", backref="shipment", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def coords(self):
@@ -291,6 +335,67 @@ class Shipment(db.Model):
                 created_by=(user.name if user else "System"),
             )
         )
+        self._record_handoff(status, location, user)
+
+    def _handoff_parties(self, stage, default_from, default_to):
+        """Resolve human-readable custody parties from the shipment context."""
+        frm, to = default_from, default_to
+
+        def _hub():
+            if self.hub:
+                return self.hub
+            return db.session.get(Hub, self.hub_id) if self.hub_id else None
+
+        def _courier():
+            if self.courier:
+                return self.courier
+            return db.session.get(User, self.courier_id) if self.courier_id else None
+
+        def _merchant():
+            if self.merchant:
+                return self.merchant
+            return db.session.get(User, self.merchant_id) if self.merchant_id else None
+
+        try:
+            if stage == "merchant_to_hub":
+                m, h = _merchant(), _hub()
+                frm = (m.display_name if m else None) or self.sender_name or default_from
+                to = h.name if h else default_to
+            elif stage == "hub_to_courier":
+                h, c = _hub(), _courier()
+                frm = h.name if h else default_from
+                to = c.name if c else default_to
+            elif stage == "courier_to_customer":
+                c = _courier()
+                frm = c.name if c else default_from
+                to = self.receiver_name or default_to
+            elif stage == "courier_to_hub_return":
+                c, h = _courier(), _hub()
+                frm = c.name if c else default_from
+                to = h.name if h else default_to
+        except Exception:  # pragma: no cover - never block a status change
+            pass
+        return frm, to
+
+    def _record_handoff(self, status, location, user):
+        """Append a tamper-evident chain-of-custody record for custody transfers."""
+        mapping = HANDOFF_MAP.get(status)
+        if not mapping:
+            return
+        stage, default_from, default_to = mapping
+        existing = list(self.handoffs)
+        seq = len(existing) + 1
+        prev_hash = existing[-1].record_hash if existing else "GENESIS"
+        from_party, to_party = self._handoff_parties(stage, default_from, default_to)
+        ts = naive_utcnow()
+        rec_hash = handoff_hash(self.tracking_number, seq, stage, from_party,
+                                to_party, ts, prev_hash)
+        self.handoffs.append(HandoffRecord(
+            sequence=seq, stage=stage, from_party=from_party, to_party=to_party,
+            location=location, actor=(user.name if user else "System"),
+            created_at=ts, prev_hash=prev_hash, record_hash=rec_hash,
+            verified=bool(location),
+        ))
 
     def __repr__(self):
         return f"<Shipment {self.tracking_number} {self.status}>"
@@ -377,3 +482,107 @@ class RoadClosure(db.Model):
 
     def __repr__(self):
         return f"<RoadClosure {self.name} r={self.radius_m}m active={self.is_active}>"
+
+
+# --------------------------------------------------------------------------- #
+#  Chain-of-custody handoff (tamper-evident ledger)
+# --------------------------------------------------------------------------- #
+class HandoffRecord(db.Model):
+    """One custody transfer in a shipment's chain of custody.
+
+    Each record stores a SHA-256 ``record_hash`` computed over its own fields and
+    the previous record's hash (``prev_hash``), forming a hash chain. Altering any
+    earlier record breaks every subsequent hash, so tampering is detectable via
+    :func:`app.audit.verify_chain`.
+    """
+    __tablename__ = "handoff_records"
+
+    STAGE_LABELS = {
+        "merchant_to_hub": "Merchant → Hub",
+        "hub_to_courier": "Hub → Courier",
+        "courier_to_customer": "Courier → Customer",
+        "courier_to_hub_return": "Courier → Hub (return)",
+    }
+
+    id = db.Column(db.Integer, primary_key=True)
+    shipment_id = db.Column(db.Integer, db.ForeignKey("shipments.id"), nullable=False, index=True)
+    sequence = db.Column(db.Integer, nullable=False)
+    stage = db.Column(db.String(40), nullable=False)
+    from_party = db.Column(db.String(120))
+    to_party = db.Column(db.String(120))
+    location = db.Column(db.String(160))
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
+    actor = db.Column(db.String(120), default="System")
+    prev_hash = db.Column(db.String(64), nullable=False, default="GENESIS")
+    record_hash = db.Column(db.String(64), nullable=False)
+    verified = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=naive_utcnow)
+
+    @property
+    def stage_label(self):
+        return self.STAGE_LABELS.get(self.stage, self.stage.replace("_", " ").title())
+
+    def __repr__(self):
+        return f"<HandoffRecord {self.stage} seq={self.sequence}>"
+
+
+# --------------------------------------------------------------------------- #
+#  GIS delivery confirmation (geofence check by tracking number)
+# --------------------------------------------------------------------------- #
+class DeliveryConfirmation(db.Model):
+    """Where a parcel was actually confirmed delivered, vs. its destination.
+
+    ``distance_m`` is the great-circle gap between the confirmed point and the
+    receiver's location; ``verified`` is True when that gap is within ``radius_m``.
+    """
+    __tablename__ = "delivery_confirmations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    shipment_id = db.Column(db.Integer, db.ForeignKey("shipments.id"), unique=True, nullable=False, index=True)
+    lat = db.Column(db.Float, nullable=False)
+    lon = db.Column(db.Float, nullable=False)
+    dest_lat = db.Column(db.Float, nullable=False)
+    dest_lon = db.Column(db.Float, nullable=False)
+    distance_m = db.Column(db.Float, nullable=False)
+    radius_m = db.Column(db.Integer, default=200, nullable=False)
+    verified = db.Column(db.Boolean, default=False, nullable=False)
+    source = db.Column(db.String(20), default="gps")  # gps | simulated | manual
+    created_at = db.Column(db.DateTime, default=utcnow)
+
+    @property
+    def coords(self):
+        return [self.lat, self.lon]
+
+    def __repr__(self):
+        return f"<DeliveryConfirmation ship={self.shipment_id} verified={self.verified}>"
+
+
+# --------------------------------------------------------------------------- #
+#  Predicted-vs-actual feedback log (the learning feedback loop)
+# --------------------------------------------------------------------------- #
+class PredictionLog(db.Model):
+    """A prediction made for a shipment, resolved against the actual outcome.
+
+    ``kind`` is one of ``dropoff`` / ``pickup`` / ``late``. ``predicted`` is the
+    model output at dispatch time; ``actual`` and ``error`` are filled in when the
+    shipment completes, closing the feedback loop.
+    """
+    __tablename__ = "prediction_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    shipment_id = db.Column(db.Integer, db.ForeignKey("shipments.id"), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False, index=True)
+    predicted = db.Column(db.Float, nullable=False)
+    actual = db.Column(db.Float)
+    error = db.Column(db.Float)
+    model_version = db.Column(db.String(40))
+    created_at = db.Column(db.DateTime, default=utcnow)
+    resolved_at = db.Column(db.DateTime)
+
+    @property
+    def resolved(self):
+        return self.resolved_at is not None
+
+    def __repr__(self):
+        return f"<PredictionLog {self.kind} pred={self.predicted} actual={self.actual}>"

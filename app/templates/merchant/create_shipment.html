@@ -28,6 +28,11 @@
                     <div class="col">{{ form.weight_kg.label(class="form-label") }}{{ form.weight_kg(class="form-control") }}</div>
                     <div class="col">{{ form.cod_amount.label(class="form-label") }}{{ form.cod_amount(class="form-control") }}</div>
                 </div>
+                <div class="mt-2">
+                    {{ form.delivery_notes.label(class="form-label") }}
+                    {{ form.delivery_notes(class="form-control", rows="2", placeholder=form.delivery_notes.description) }}
+                    <div class="form-text">The AI reads these to flag fragile, time-window and handoff needs.</div>
+                </div>
                 <div class="mt-2">{{ form.hub_id.label(class="form-label") }}{{ form.hub_id(class="form-select") }}</div>
             </div>
         </div>

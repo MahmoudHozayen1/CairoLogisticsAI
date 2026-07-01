@@ -88,11 +88,36 @@ FIRST_NAMES = [
     "Mariam", "Youssef", "Laila", "Khaled", "Hana",
 ]
 
+# Free-text delivery instructions used to demo the NLP handling-notes model.
+# Deliberately varied phrasing (not just the training fragments) so the learned
+# classifier — not only the regexes — is exercised end to end.
+DEMO_NOTES = [
+    "Fragile, please handle with care — contains glass.",
+    "Don't stack anything on top of this box.",
+    "Deliver between 6 and 9 pm only, I'm at work before that.",
+    "Leave with the doorman if I don't answer.",
+    "Please call before arriving, the bell is broken.",
+    "4th floor, no lift — sorry for the climb!",
+    "Cash ready, exact change for the COD.",
+    "Meet me at the building gate, I'll come down.",
+    "Fragile items inside, deliver in the morning and ring the bell twice.",
+    "Concierge at reception can receive it, do not stack.",
+    "",  # some parcels carry no notes
+    "",
+]
+
 
 def _maybe_clear():
     """Wipe existing rows so reseeding is idempotent."""
-    from app.models import ShipmentEvent, RouteStop, RoadClosure
+    from app.models import (
+        ShipmentEvent, RouteStop, RoadClosure,
+        HandoffRecord, DeliveryConfirmation, PredictionLog,
+    )
 
+    # Child rows referencing shipments must go before the shipments themselves.
+    db.session.query(PredictionLog).delete()
+    db.session.query(DeliveryConfirmation).delete()
+    db.session.query(HandoffRecord).delete()
     db.session.query(RouteStop).delete()
     db.session.query(ShipmentEvent).delete()
     db.session.query(RoadClosure).delete()
@@ -167,6 +192,7 @@ def seed_data():
         + [ShipmentStatus.FAILED] * 2
     )
 
+    delivered_shipments = []
     for status in history_statuses:
         point = rng.choice(DELIVERY_POINTS)
         merchant = rng.choice(merchants)
@@ -191,6 +217,7 @@ def seed_data():
             package_description=rng.choice(["Electronics", "Clothing", "Books", "Cosmetics", "Documents"]),
             weight_kg=round(rng.uniform(0.3, 6.0), 1),
             cod_amount=rng.choice([0, 0, 150, 320, 480, 1200]),
+            delivery_notes=(rng.choice(DEMO_NOTES) or None),
             created_at=created,
         )
         s.add_event(ShipmentStatus.PENDING, note="Shipment created")
@@ -204,6 +231,7 @@ def seed_data():
         if status == ShipmentStatus.DELIVERED:
             s.add_event(ShipmentStatus.DELIVERED, note="Delivered successfully", location=point[0])
             s.delivered_at = created + timedelta(hours=6)
+            delivered_shipments.append(s)
         if status == ShipmentStatus.FAILED:
             s.delivery_attempts = 1
             s.add_event(ShipmentStatus.FAILED, note="Recipient unavailable")
@@ -231,6 +259,7 @@ def seed_data():
             package_description=rng.choice(["Electronics", "Clothing", "Books", "Cosmetics", "Documents"]),
             weight_kg=round(rng.uniform(0.4, 7.5), 1),
             cod_amount=rng.choice([0, 150, 240, 320, 480, 850, 1200]),
+            delivery_notes=(DEMO_NOTES[idx % len(DEMO_NOTES)] or None),
             created_at=dispatch_created + timedelta(minutes=idx),
         )
         s.add_event(ShipmentStatus.PENDING, note="Shipment created")
@@ -249,6 +278,12 @@ def seed_data():
         radius_m=180,
     ))
 
+    db.session.commit()
+
+    # --- GIS delivery confirmations for delivered demo shipments ---------
+    from app.audit import confirm_delivery_location
+    for s in delivered_shipments:
+        confirm_delivery_location(s)  # simulates a point near the destination
     db.session.commit()
 
     # Pre-populate the map and courier dashboards. Tuesday morning produces

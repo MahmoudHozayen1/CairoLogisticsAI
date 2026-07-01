@@ -34,6 +34,9 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.hubs') }}">Hubs</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.couriers') }}">Couriers</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.closures') }}">Traffic</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.ai_overview') }}"><i class="bi bi-cpu"></i> AI</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.audit_overview') }}"><i class="bi bi-shield-check"></i> Audit</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.assistant') }}"><i class="bi bi-chat-dots"></i> Assistant</a></li>
                     {% elif current_user.is_courier %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('courier.dashboard') }}">My Deliveries</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('courier.route_map') }}">My Route</a></li>

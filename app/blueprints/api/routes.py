@@ -15,6 +15,7 @@ from ...models import Shipment, ShipmentStatus, Role
 
 
 def _shipment_public(s):
+    conf = s.delivery_confirmation
     return {
         "tracking_number": s.tracking_number,
         "status": s.status,
@@ -23,6 +24,15 @@ def _shipment_public(s):
         "district": s.district,
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "delivered_at": s.delivered_at.isoformat() if s.delivered_at else None,
+        "geo_confirmation": ({
+            "verified": conf.verified,
+            "distance_m": conf.distance_m,
+            "radius_m": conf.radius_m,
+            "source": conf.source,
+            "lat": conf.lat,
+            "lon": conf.lon,
+            "at": conf.created_at.isoformat() if conf.created_at else None,
+        } if conf else None),
         "timeline": [
             {
                 "status": e.status,

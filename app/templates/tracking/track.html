@@ -48,6 +48,22 @@
                         <div class="small text-muted">Created {{ shipment.created_at.strftime('%d %b %Y') if shipment.created_at }}</div>
                     </div>
                 </div>
+                {% if shipment.delivery_confirmation %}
+                {% set c = shipment.delivery_confirmation %}
+                <div class="alert {{ 'alert-success' if c.verified else 'alert-warning' }} d-flex align-items-center gap-2 mt-3 mb-0">
+                    <i class="bi {{ 'bi-shield-check' if c.verified else 'bi-geo-alt' }} fs-5"></i>
+                    <div class="small">
+                        {% if c.verified %}
+                        <strong>Delivery location confirmed.</strong>
+                        Confirmed within <strong>{{ c.distance_m|round(0)|int }} m</strong> of the destination
+                        (inside the {{ c.radius_m }} m verification zone).
+                        {% else %}
+                        <strong>Delivery recorded {{ c.distance_m|round(0)|int }} m from the destination</strong>
+                        — outside the {{ c.radius_m }} m verification zone.
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
 

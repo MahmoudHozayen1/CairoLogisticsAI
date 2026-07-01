@@ -1,0 +1,63 @@
+{# Handling-notes NLP card. Expects `note_analysis` (result of
+   ModelService.analyze_note) in context. Renders extracted handling tags with
+   the reasoning that produced each one. #}
+{% if note_analysis and note_analysis.tags %}
+{% set sev_color = {'high': 'danger', 'medium': 'warning', 'low': 'secondary'} %}
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold mb-0"><i class="bi bi-chat-left-text"></i> Handling instructions
+                <span class="badge bg-light text-muted fw-normal">NLP</span></h6>
+            <span class="badge bg-{{ 'danger' if note_analysis.priority_score >= 60 else ('warning' if note_analysis.priority_score >= 30 else 'secondary') }}">
+                Priority {{ note_analysis.priority_score }}/100
+            </span>
+        </div>
+        <p class="small text-muted fst-italic mb-3">&ldquo;{{ note_analysis.text }}&rdquo;</p>
+
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for t in note_analysis.tags %}
+            <span class="badge rounded-pill bg-{{ sev_color[t.severity] }}">
+                {{ t.icon }} {{ t.label }}
+                <span class="opacity-75">· {{ (t.confidence * 100)|round|int }}%</span>
+            </span>
+            {% endfor %}
+        </div>
+
+        {% if note_analysis.time_window %}
+        <div class="small mb-2"><i class="bi bi-clock"></i>
+            <strong>Delivery window:</strong>
+            {{ '%02d:00'|format(note_analysis.time_window.start_hour) if note_analysis.time_window.start_hour is not none else 'any' }}
+            –
+            {{ '%02d:00'|format(note_analysis.time_window.end_hour) if note_analysis.time_window.end_hour is not none else 'any' }}
+        </div>
+        {% endif %}
+
+        <div class="accordion accordion-flush" id="noteReasoning">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed small py-2" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#noteWhy">
+                        Why these tags? (model reasoning)
+                    </button>
+                </h2>
+                <div id="noteWhy" class="accordion-collapse collapse" data-bs-parent="#noteReasoning">
+                    <div class="accordion-body py-2">
+                        <ul class="list-unstyled small mb-0">
+                            {% for t in note_analysis.tags %}
+                            <li class="mb-2">
+                                <span class="badge bg-{{ sev_color[t.severity] }}">{{ t.icon }} {{ t.label }}</span>
+                                <span class="text-muted">via {{ t.source }}</span>
+                                <div class="text-muted">{{ t.action }}</div>
+                                {% if t.evidence %}
+                                <div class="text-muted">↳ {{ t.evidence|join('; ') }}</div>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

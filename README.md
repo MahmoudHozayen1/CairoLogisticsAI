@@ -18,6 +18,8 @@
 | **Multi-role auth** | Admin, Courier and Merchant portals with role-based access control. |
 | **Merchant portal** | Create shipments by dropping a pin on a map, set COD, track every parcel. |
 | **AI route optimisation** | k-means clustering per courier + 6 TSP techniques (greedy, 2-opt, Or-opt, NetworkX Christofides & Simulated Annealing), benchmarked. |
+| **Predictive ML suite** | Explainable ETA & late-risk models, demand forecasting, a learning-to-route neural policy, courier-behaviour personas, handling-note NLP and a data-grounded operations assistant — see **[docs/AI_ML_FEATURES.md](docs/AI_ML_FEATURES.md)**. |
+| **Trust & audit** | SHA-256 hash-chained chain-of-custody, GIS delivery confirmation, and a model feedback/drift monitor. |
 | **Street-following routes** | Real road geometry via OSRM (cached, with offline fallback). |
 | **Live traffic & closures** | Routes coloured by simulated, time-of-day congestion; admins mark road closures that the optimiser re-routes around. |
 | **Courier portal** | Optimised stop list, live route map, one-tap *Delivered/Failed*, photo proof of delivery. |
@@ -46,6 +48,8 @@
 | --- | --- |
 | [![Courier deliveries](docs/screenshots/06-courier-dashboard.png)](docs/screenshots/06-courier-dashboard.png) | [![Courier route traffic](docs/screenshots/09-courier-route-traffic.png)](docs/screenshots/09-courier-route-traffic.png) |
 
+> 👉 **[See the full gallery — every screen, role and use case](docs/SCREENSHOTS.md)** (27 screenshots).
+>
 > Regenerate these anytime by running the app, then
 > [`scripts/capture_screenshots.py`](scripts/capture_screenshots.py) (headless Playwright;
 > `pip install playwright && python -m playwright install chromium`).
@@ -66,6 +70,8 @@ app/
 ├── routing/
 │   ├── optimizer.py      → clustering + TSP sequencing (the AI optimiser)
 │   └── street_router.py  → OSRM street geometry, traffic model, closure avoidance
+├── ml/                   → predictive layer (ETA, forecast, NLP, neural router, personas)
+├── audit.py              → SHA-256 chain-of-custody + GIS delivery confirmation
 ├── blueprints/           → main, auth, admin, courier, merchant, tracking, api
 ├── templates/            → Jinja2 + Bootstrap 5 + Leaflet
 └── static/               → CSS + proof-of-delivery uploads
@@ -236,8 +242,11 @@ curl http://127.0.0.1:5000/api/track/SR-7F3K9Q2A
 pytest -q
 ```
 
-Covers registration, role protection, the full create → optimise → deliver → track lifecycle, and
-the optimiser.
+**74 tests, all passing.** They cover registration, role protection, the full
+create → optimise → deliver → track lifecycle, the optimiser, and the entire AI/ML layer —
+ETA/forecast models (`test_ml.py`), chain-of-custody & GIS audit (`test_audit.py`), handling-note
+NLP & assistant (`test_nlp.py`), the neural router (`test_router.py`) and courier-behaviour
+personas (`test_behavior.py`).
 
 ---
 
@@ -247,6 +256,9 @@ the optimiser.
 flask --app run init-db        # create tables
 flask --app run seed           # demo data
 flask --app run create-admin   # interactive admin creation
+flask --app run train-ml       # ETA/late/forecast/notes models
+flask --app run train-router   # neural pointer-policy router
+flask --app run train-behavior # courier-behaviour personas
 ```
 
 ---

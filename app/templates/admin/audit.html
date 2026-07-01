@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Chain-of-Custody Audit{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-shield-check"></i> Chain-of-Custody Audit</h3>
+    <a href="{{ url_for('admin.ai_overview') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-cpu"></i> AI dashboard</a>
+</div>
+
+<p class="text-muted small mb-4">
+    Every custody transfer (merchant → hub → courier → customer) is written to a tamper-evident
+    hash chain. Each record is signed with SHA-256 over its own fields plus the previous record's
+    hash, so any edit to history is detected here.
+</p>
+
+<!-- Summary -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Chains verified</div>
+            <div class="stat-value text-primary-dark">{{ stats.chains }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Intact</div>
+            <div class="stat-value text-success">{{ stats.intact }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Tampered</div>
+            <div class="stat-value {{ 'text-danger' if stats.broken else 'text-muted' }}">{{ stats.broken }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">GIS confirmed</div>
+            <div class="stat-value text-primary-dark">{{ stats.confirmed }}
+                <span class="fs-6 text-muted">/ {{ stats.confirmed + stats.unverified }}</span></div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-soft p-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Tracking #</th>
+                    <th>Status</th>
+                    <th>Custody chain</th>
+                    <th class="text-center">Handoffs</th>
+                    <th class="text-center">Integrity</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                {% set s = row.shipment %}
+                <tr>
+                    <td class="fw-bold">{{ s.tracking_number }}</td>
+                    <td><span class="badge bg-light text-dark">{{ s.status_label }}</span></td>
+                    <td>
+                        {% for item in row.chain.records %}
+                        <span class="badge {{ 'bg-success-subtle text-success' if item.valid else 'bg-danger-subtle text-danger' }} border me-1">
+                            {{ item.record.stage_label }}</span>
+                        {% endfor %}
+                    </td>
+                    <td class="text-center">{{ row.chain.count }}</td>
+                    <td class="text-center">
+                        {% if row.chain.ok %}
+                        <span class="badge bg-success"><i class="bi bi-check-lg"></i> Verified</span>
+                        {% else %}
+                        <span class="badge bg-danger"><i class="bi bi-exclamation-triangle"></i> Broken</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{{ url_for('admin.shipment_detail', shipment_id=s.id) }}"
+                           class="btn btn-sm btn-outline-primary">Open</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center text-muted py-4">No custody records yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

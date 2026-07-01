@@ -31,6 +31,16 @@ networkx==3.4.2
 # installed so the documented benchmark command works out of the box.
 matplotlib==3.11.0
 
+# --- Predictive ML layer (app/ml/) ---
+# Powers the delivery-time / pickup-time / late-risk predictors, the demand &
+# cost forecaster and the per-prediction reasoning surfaced on the AI dashboard.
+# Pure-Python inference on CPU; artifacts are trained offline and loaded from
+# instance/ml/artifacts/ at runtime, so this deploys on the free hosting tiers.
+scikit-learn==1.9.0
+pandas==3.0.3
+joblib==1.5.3
+# numpy & scipy are pulled in transitively (numpy also by matplotlib).
+
 # --- Optional: high-fidelity street routing for the optimizer ---
 # Enable with ENABLE_STREET_ROUTING=1. Heavy dependencies; the optimizer falls
 # back to fast straight-line geometry when these are not installed.

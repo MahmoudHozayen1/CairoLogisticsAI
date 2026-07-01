@@ -92,6 +92,17 @@ class Config:
     OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org")
     ROUTING_TIMEOUT = float(os.environ.get("ROUTING_TIMEOUT", "6"))
 
+    # Admin assistant (chatbot) -------------------------------------------
+    # The assistant ALWAYS works offline by retrieving answers from the local
+    # database. When an Ollama server is reachable it additionally uses the LLM
+    # to phrase the answer over the retrieved facts. Set ASSISTANT_USE_LLM=0 to
+    # force the deterministic offline responder (e.g. on free hosting tiers with
+    # no GPU/Ollama). The base URL/model default to a local Ollama install.
+    ASSISTANT_USE_LLM = _env_bool("ASSISTANT_USE_LLM", "1")
+    OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+    OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "20"))
+
     # Deployment bootstrap -------------------------------------------------
     # On platforms like Render/Railway there is no shell step to create tables.
     # Set AUTO_INIT_DB=1 to create any missing tables on startup, and SEED_DEMO=1

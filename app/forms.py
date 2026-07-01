@@ -80,6 +80,11 @@ class ShipmentForm(FlaskForm):
     package_description = StringField("Package description", validators=[Optional(), Length(0, 255)])
     weight_kg = FloatField("Weight (kg)", validators=[Optional(), NumberRange(0, 1000)], default=1.0)
     cod_amount = FloatField("Cash on delivery (EGP)", validators=[Optional(), NumberRange(0, 1_000_000)], default=0.0)
+    delivery_notes = TextAreaField(
+        "Delivery notes / handling instructions",
+        validators=[Optional(), Length(0, 500)],
+        description="e.g. fragile, don't stack, deliver 6–9 pm, leave with doorman",
+    )
     hub_id = SelectField("Origin hub", coerce=int, validators=[Optional()])
     submit = SubmitField("Create shipment")
 
@@ -94,6 +99,11 @@ class DeliveryUpdateForm(FlaskForm):
     proof = FileField("Proof of delivery (photo)", validators=[
         FileAllowed(["png", "jpg", "jpeg", "webp", "gif"], "Images only."),
     ])
+    # Populated client-side from the browser Geolocation API for the GIS
+    # delivery confirmation. Optional: if absent, a point near the destination
+    # is simulated so the geofence check still runs.
+    deliver_lat = StringField("Delivery latitude", validators=[Optional()])
+    deliver_lon = StringField("Delivery longitude", validators=[Optional()])
     submit = SubmitField("Confirm")
 
 

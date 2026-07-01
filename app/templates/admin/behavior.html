@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% block title %}Courier Personas{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0">
+        <i class="bi bi-person-badge"></i> Courier Behaviour Modelling</h3>
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ url_for('admin.ai_overview') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to AI</a>
+        {% if detail %}
+        <form method="GET" class="d-flex align-items-center gap-2">
+            <select name="courier_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for c in couriers %}
+                <option value="{{ c.id }}" {{ 'selected' if detail and c.id == detail.courier.id }}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<p class="text-muted">
+    Each courier's shift is reconstructed from a <strong>simulated GPS trace</strong>.
+    A <strong>stop-detection</strong> pass turns the raw pings into driving, delivery,
+    idle and break segments, which become behavioural features. K-Means then groups
+    shifts into interpretable <strong>personas</strong>, and every score is explained
+    with the features that drove it (standardised z-scores). Pure NumPy + scikit-learn,
+    so it deploys without extra services.
+</p>
+
+{% if error %}
+<div class="alert alert-warning border"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>
+{% endif %}
+
+{% if metrics %}
+<!-- Model scorecards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Personas found</h6>
+                <i class="bi bi-people text-primary"></i></div>
+            <div class="stat-value text-primary-dark">{{ metrics.personas|length }}</div>
+            <div class="small text-muted">from {{ metrics.n_shifts }} simulated shifts</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Cluster separation</h6>
+                <i class="bi bi-diagram-2 text-success"></i></div>
+            <div class="stat-value text-primary-dark">{{ metrics.silhouette }}</div>
+            <div class="small text-muted">silhouette score (−1…1)</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Recovers behaviour</h6>
+                <i class="bi bi-bullseye text-warning"></i></div>
+            <div class="stat-value text-primary-dark">{{ metrics.adjusted_rand_vs_archetypes }}</div>
+            <div class="small text-muted">adjusted Rand vs ground truth</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Fleet size</h6>
+                <i class="bi bi-truck text-primary"></i></div>
+            <div class="stat-value text-primary-dark">{{ fleet|length }}</div>
+            <div class="small text-muted">couriers analysed</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- Fleet roster -->
+    <div class="col-lg-7">
+        <div class="card card-soft p-3 h-100">
+            <h6 class="fw-bold mb-3"><i class="bi bi-list-check"></i> Fleet roster</h6>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="text-muted small text-uppercase">
+                        <tr>
+                            <th>Courier</th><th>Persona</th><th style="width:130px">Productivity</th>
+                            <th class="text-center">Drops</th><th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in fleet %}
+                        <tr class="{{ 'table-active' if detail and row.courier.id == detail.courier.id }}">
+                            <td>
+                                <a href="{{ url_for('admin.ai_behavior', courier_id=row.courier.id) }}"
+                                   class="text-decoration-none fw-semibold">{{ row.courier.name }}</a>
+                                <div class="small text-muted">{{ row.courier.vehicle_type }}</div>
+                            </td>
+                            <td>
+                                <span class="persona-chip persona-{{ row.persona.name|lower|replace(' ','-')|replace('/','-') }}">
+                                    {{ row.persona.name }}</span>
+                                <div class="small text-muted">{{ row.persona.trait }}</div>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar {{ 'bg-success' if row.score >= 66 else 'bg-warning' if row.score >= 40 else 'bg-danger' }}"
+                                         style="width: {{ row.score }}%"></div>
+                                </div>
+                                <div class="small text-muted mt-1">{{ row.score }} / 100</div>
+                            </td>
+                            <td class="text-center fw-semibold">{{ row.deliveries }}</td>
+                            <td>
+                                {% for f in row.flags %}
+                                <span class="badge bg-danger-subtle text-danger-emphasis border">{{ f }}</span>
+                                {% else %}
+                                <span class="badge bg-success-subtle text-success-emphasis border">Clean</span>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Persona mix -->
+    <div class="col-lg-5">
+        <div class="card card-soft p-3 h-100">
+            <h6 class="fw-bold mb-2"><i class="bi bi-pie-chart"></i> Persona mix</h6>
+            <div class="small text-muted mb-2">How the current fleet splits across personas.</div>
+            <canvas id="mixChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+{% if detail %}
+{% set r = detail.result %}
+<hr class="my-4">
+<h5 class="fw-bold text-primary-dark mb-3">
+    <i class="bi bi-person-lines-fill"></i> {{ detail.courier.name }}
+    <span class="persona-chip persona-{{ r.persona.name|lower|replace(' ','-')|replace('/','-') }} ms-2">
+        {{ r.persona.name }}</span>
+</h5>
+
+<!-- Shift scorecards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Productivity</h6>
+                <i class="bi bi-speedometer2 text-primary"></i></div>
+            <div class="stat-value {{ 'text-success' if r.productivity_score >= 66 else 'text-warning' if r.productivity_score >= 40 else 'text-danger' }}">
+                {{ r.productivity_score }}</div>
+            <div class="small text-muted">out of 100 · {{ (r.persona_confidence * 100)|round(0)|int }}% persona fit</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Deliveries</h6>
+                <i class="bi bi-box-seam text-success"></i></div>
+            <div class="stat-value text-primary-dark">{{ r.summary.n_deliveries }}</div>
+            <div class="small text-muted">{{ r.summary.deliveries_per_hour }} per active hour</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Avg. speed</h6>
+                <i class="bi bi-speedometer text-warning"></i></div>
+            <div class="stat-value text-primary-dark">{{ r.summary.avg_speed_kmh }}</div>
+            <div class="small text-muted">km/h while moving</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Route detour</h6>
+                <i class="bi bi-signpost-2 text-primary"></i></div>
+            <div class="stat-value text-primary-dark">{{ r.summary.detour_ratio }}×</div>
+            <div class="small text-muted">driven vs straight-line</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Map -->
+    <div class="col-lg-7">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-map"></i> Reconstructed shift</h6>
+                <div class="small d-flex gap-2 flex-wrap">
+                    <span><span class="dot" style="background:#0d3b66"></span> Driving</span>
+                    <span><span class="dot" style="background:#2a9d8f"></span> Delivery</span>
+                    <span><span class="dot" style="background:#e76f51"></span> Break</span>
+                    <span><span class="dot" style="background:#e9c46a"></span> Idle</span>
+                </div>
+            </div>
+            <div id="map" style="height: 420px; border-radius: 12px;"></div>
+        </div>
+    </div>
+
+    <!-- Time budget + flags + reasoning -->
+    <div class="col-lg-5">
+        <div class="card card-soft p-3 mb-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-clock-history"></i> Time budget</h6>
+            <canvas id="timeChart" height="150"></canvas>
+        </div>
+        <div class="card card-soft p-3">
+            <h6 class="fw-bold mb-2"><i class="bi bi-lightbulb"></i> Why this persona</h6>
+            {% if r.flags %}
+            <div class="mb-3">
+                {% for f in r.flags %}
+                <span class="badge bg-danger-subtle text-danger-emphasis border me-1"><i class="bi bi-flag"></i> {{ f }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% for rz in r.reasoning %}
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="reason-verdict verdict-{{ rz.verdict }}">
+                    <i class="bi bi-{{ 'check-lg' if rz.verdict == 'good' else 'exclamation-lg' if rz.verdict == 'bad' else 'dash-lg' }}"></i>
+                </span>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-semibold small">{{ rz.label }}</span>
+                        <span class="small text-muted">{{ rz.direction }} avg · z={{ rz.z }}</span>
+                    </div>
+                    <div class="zbar mt-1">
+                        <div class="zbar-fill {{ 'zbar-good' if rz.verdict == 'good' else 'zbar-bad' if rz.verdict == 'bad' else 'zbar-note' }}"
+                             style="width: {{ [(rz.z|abs) * 33, 100]|min }}%"></div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const mix = {{ distribution|tojson }};
+    const mixLabels = Object.keys(mix);
+    const mixColors = { 'Efficient': '#2a9d8f', 'Steady': '#0d3b66', 'Idle-prone': '#e9c46a', 'At-risk': '#e76f51' };
+    new Chart(document.getElementById('mixChart'), {
+        type: 'doughnut',
+        data: {
+            labels: mixLabels,
+            datasets: [{ data: mixLabels.map(k => mix[k]),
+                backgroundColor: mixLabels.map(k => mixColors[k] || '#94a3b8') }]
+        },
+        options: { plugins: { legend: { position: 'right' } } }
+    });
+</script>
+{% if detail %}
+{% set r = detail.result %}
+<script>
+    const stateColors = { driving: '#0d3b66', delivery: '#2a9d8f', break: '#e76f51', idle: '#e9c46a' };
+    const pts = {{ r.points|tojson }};
+    const stops = {{ r.stops|tojson }};
+    const start = [pts[0].lat, pts[0].lon];
+
+    const map = L.map('map').setView(start, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+    // Base driving path through all pings.
+    const line = pts.map(p => [p.lat, p.lon]);
+    L.polyline(line, { color: '#0d3b66', weight: 3, opacity: .55 }).addTo(map);
+
+    // Hub / start marker.
+    const hubIcon = L.divIcon({ html: '<i class="bi bi-house-fill" style="font-size:22px;color:#0d3b66"></i>', className: '', iconSize: [22, 22] });
+    L.marker(start, { icon: hubIcon }).addTo(map).bindPopup('<b>Shift start</b>');
+
+    // Colour-coded stops sized by dwell time.
+    const bounds = [start];
+    stops.forEach(s => {
+        const c = [s.lat, s.lon];
+        bounds.push(c);
+        L.circleMarker(c, {
+            radius: Math.min(6 + s.dwell_min, 16),
+            color: stateColors[s.state] || '#94a3b8',
+            fillColor: stateColors[s.state] || '#94a3b8', fillOpacity: .8, weight: 1,
+        }).addTo(map).bindPopup('<b>' + s.state + '</b><br>' + s.dwell_min + ' min');
+    });
+    if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+
+    // Time budget doughnut.
+    const s = {{ r.summary|tojson }};
+    const deliverMin = +(s.avg_delivery_min * s.n_deliveries).toFixed(1);
+    new Chart(document.getElementById('timeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Driving', 'Delivering', 'Breaks', 'Idle'],
+            datasets: [{
+                data: [s.moving_min, deliverMin, s.break_min, s.idle_min],
+                backgroundColor: ['#0d3b66', '#2a9d8f', '#e76f51', '#e9c46a'],
+            }]
+        },
+        options: { plugins: { legend: { position: 'right' },
+            tooltip: { callbacks: { label: c => c.label + ': ' + c.parsed + ' min' } } } }
+    });
+</script>
+{% endif %}
+<style>
+    .persona-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; }
+    .persona-efficient { background: #2a9d8f; }
+    .persona-steady { background: #0d3b66; }
+    .persona-idle-prone { background: #e9c46a; color: #4d3b00; }
+    .persona-at-risk { background: #e76f51; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+    .reason-verdict { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; color: #fff; flex-shrink: 0; }
+    .verdict-good { background: #2a9d8f; }
+    .verdict-bad { background: #e76f51; }
+    .verdict-note { background: #94a3b8; }
+    .zbar { height: 6px; background: #eef2f6; border-radius: 4px; overflow: hidden; }
+    .zbar-fill { height: 100%; border-radius: 4px; }
+    .zbar-good { background: #2a9d8f; }
+    .zbar-bad { background: #e76f51; }
+    .zbar-note { background: #94a3b8; }
+</style>
+{% endblock %}

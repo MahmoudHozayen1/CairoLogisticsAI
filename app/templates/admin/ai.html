@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}AI &amp; Forecasting{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h3 class="fw-bold text-primary-dark mb-0"><i class="bi bi-cpu"></i> AI &amp; Data Science</h3>
+    <form action="{{ url_for('admin.ai_train') }}" method="POST" class="d-flex align-items-center gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <a href="{{ url_for('admin.ai_feedback') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-repeat"></i> Feedback loop</a>
+        <a href="{{ url_for('admin.ai_router') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-diagram-3"></i> Neural router</a>
+        <a href="{{ url_for('admin.ai_behavior') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-person-badge"></i> Courier personas</a>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" name="regenerate" id="regen" value="1">
+            <label class="form-check-label small text-muted" for="regen">Rebuild data</label>
+        </div>
+        <button class="btn btn-accent btn-sm"><i class="bi bi-arrow-repeat"></i>
+            {{ 'Retrain models' if trained else 'Train models' }}</button>
+    </form>
+</div>
+
+{% if not trained %}
+<div class="card card-soft p-5 text-center">
+    <i class="bi bi-robot display-4 text-muted mb-3"></i>
+    <h5 class="fw-bold">Models not trained yet</h5>
+    <p class="text-muted mb-0">Click <strong>Train models</strong> to build the predictors and forecaster
+        from the synthetic delivery history. This runs once and is cached.</p>
+</div>
+{% else %}
+
+{% set m = metrics.models %}
+<div class="text-muted small mb-3">
+    Trained on <strong>{{ '{:,}'.format(metrics.n_rows) }}</strong> historical deliveries.
+</div>
+
+<!-- Model scorecards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Drop-off time</h6>
+                <i class="bi bi-geo-alt text-primary"></i></div>
+            <div class="small text-muted mb-2">Minutes to hand a parcel to the customer</div>
+            <div class="stat-value text-primary-dark">±{{ m.dropoff.mae }} min</div>
+            <div class="small text-muted">mean abs. error · R² {{ m.dropoff.r2 }}</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Pickup time</h6>
+                <i class="bi bi-shop text-primary"></i></div>
+            <div class="small text-muted mb-2">Minutes to collect from a store</div>
+            <div class="stat-value text-primary-dark">±{{ m.pickup.mae }} min</div>
+            <div class="small text-muted">mean abs. error · R² {{ m.pickup.r2 }}</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Late risk</h6>
+                <i class="bi bi-clock-history text-danger"></i></div>
+            <div class="small text-muted mb-2">Probability a delivery misses its SLA</div>
+            <div class="stat-value text-primary-dark">{{ (m.late.roc_auc * 100)|round(1) }}%</div>
+            <div class="small text-muted">ROC-AUC · {{ (m.late.base_rate * 100)|round(0) }}% base late rate</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card card-soft p-3 h-100">
+            <div class="d-flex justify-content-between"><h6 class="fw-bold mb-1">Forecast</h6>
+                <i class="bi bi-graph-up-arrow text-success"></i></div>
+            <div class="small text-muted mb-2">Daily orders &amp; cost, 14-day horizon</div>
+            <div class="stat-value text-primary-dark">{{ m.forecast.orders_mape }}%</div>
+            <div class="small text-muted">orders MAPE · cost {{ m.forecast.cost_mape }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Growth KPIs -->
+<div class="row g-3 mb-4">
+    {% set og = forecast.orders_growth %}
+    {% set cg = forecast.cost_growth %}
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Orders / day (recent)</div>
+            <div class="stat-value text-primary-dark">{{ og.recent_avg }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Order growth (MoM)</div>
+            <div class="stat-value {{ 'text-success' if og.monthly_growth_pct >= 0 else 'text-danger' }}">
+                {{ '%+.1f'|format(og.monthly_growth_pct) }}%</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Cost / day (recent)</div>
+            <div class="stat-value text-primary-dark">{{ '{:,.0f}'.format(cg.recent_avg) }} <span class="fs-6">EGP</span></div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card stat-card card-soft p-3 h-100">
+            <div class="text-muted small">Cost growth (MoM)</div>
+            <div class="stat-value {{ 'text-success' if cg.monthly_growth_pct >= 0 else 'text-danger' }}">
+                {{ '%+.1f'|format(cg.monthly_growth_pct) }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Forecast charts + reasoning -->
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="fw-bold mb-3">Daily orders — history &amp; 14-day forecast</h6>
+            <canvas id="ordersChart" height="150"></canvas>
+        </div>
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-3">Daily cost (EGP) — history &amp; 14-day forecast</h6>
+            <canvas id="costChart" height="150"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card card-soft p-4 mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-lightbulb text-warning"></i> Why: orders forecast</h6>
+            <ul class="list-group list-group-flush">
+                {% for r in forecast.orders_reasoning %}
+                <li class="list-group-item px-0 py-2">
+                    <div class="small fw-bold">{{ r.label }}</div>
+                    <div class="small text-muted">{{ r.detail }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="card card-soft p-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-lightbulb text-warning"></i> Why: cost forecast</h6>
+            <ul class="list-group list-group-flush">
+                {% for r in forecast.cost_reasoning %}
+                <li class="list-group-item px-0 py-2">
+                    <div class="small fw-bold">{{ r.label }}</div>
+                    <div class="small text-muted">{{ r.detail }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Feature importances -->
+<div class="row g-4 mt-1">
+    {% for key, title in [('dropoff','Drop-off time drivers'), ('pickup','Pickup time drivers'), ('late','Late-risk drivers')] %}
+    <div class="col-lg-4">
+        <div class="card card-soft p-4 h-100">
+            <h6 class="fw-bold mb-3">{{ title }}</h6>
+            {% set imp = m[key].importances %}
+            {% set top = imp.items()|list %}
+            {% for feat, val in top[:5] %}
+            <div class="mb-2">
+                <div class="d-flex justify-content-between small">
+                    <span>{{ feat.replace('_', ' ')|title }}</span>
+                    <span class="text-muted">{{ (val * 100)|round(0)|int }}%</span>
+                </div>
+                <div class="progress" style="height:6px;">
+                    <div class="progress-bar bg-info" style="width: {{ (val * 100)|round(0) }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+const CH = {{ chart|tojson }};
+const band = (label, data, color) => ({label, data, borderColor: color, backgroundColor: color,
+    borderWidth: 0, pointRadius: 0, fill: false});
+
+function forecastChart(id, s, unit) {
+    new Chart(document.getElementById(id), {
+        type: 'line',
+        data: { labels: CH.labels, datasets: [
+            {label: 'Upper', data: s.upper, borderColor: 'rgba(31,111,165,0)', pointRadius: 0, fill: false},
+            {label: '95% band', data: s.lower, borderColor: 'rgba(31,111,165,0)',
+                backgroundColor: 'rgba(31,111,165,0.12)', pointRadius: 0, fill: '-1'},
+            {label: 'Actual', data: s.actual, borderColor: '#1f6fa5', backgroundColor: '#1f6fa5',
+                tension: 0.25, pointRadius: 0, borderWidth: 2},
+            {label: 'Forecast', data: s.forecast, borderColor: '#e67e22', backgroundColor: '#e67e22',
+                borderDash: [6, 4], tension: 0.25, pointRadius: 0, borderWidth: 2},
+        ]},
+        options: {
+            interaction: {mode: 'index', intersect: false},
+            plugins: {legend: {labels: {filter: i => i.text !== 'Upper'}}},
+            scales: {y: {beginAtZero: true, title: {display: !!unit, text: unit}}}
+        }
+    });
+}
+forecastChart('ordersChart', CH.orders, 'orders');
+forecastChart('costChart', CH.cost, 'EGP');
+</script>
+{% endif %}
+{% endblock %}

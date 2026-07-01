@@ -73,6 +73,7 @@ def create_shipment():
             package_description=form.package_description.data,
             weight_kg=form.weight_kg.data or 1.0,
             cod_amount=form.cod_amount.data or 0.0,
+            delivery_notes=(form.delivery_notes.data or "").strip() or None,
             status=ShipmentStatus.PENDING,
         )
         shipment.add_event(ShipmentStatus.PENDING, note="Shipment created", user=current_user)

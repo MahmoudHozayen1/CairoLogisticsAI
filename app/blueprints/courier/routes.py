@@ -14,6 +14,35 @@ from ...routing import build_overlay, active_closure_dicts, LEVEL_COLORS, LEVEL_
 courier_only = role_required(Role.COURIER)
 
 
+def _parse_coord(value):
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _confirm_and_resolve(shipment, lat_raw, lon_raw):
+    """Record the GIS delivery confirmation and resolve prediction logs.
+
+    Never raises: a GPS/geofence or ML hiccup must not block a delivery.
+    """
+    try:
+        from ...audit import confirm_delivery_location
+        confirm_delivery_location(
+            shipment,
+            lat=_parse_coord(lat_raw),
+            lon=_parse_coord(lon_raw),
+        )
+    except Exception:
+        db.session.rollback()
+    try:
+        from ...ml.feedback import resolve_predictions
+        resolve_predictions(shipment)
+    except Exception:
+        db.session.rollback()
+
+
+
 def _my_active_shipments():
     return (
         Shipment.query.filter(
@@ -81,7 +110,15 @@ def shipment_detail(shipment_id):
         return redirect(url_for("courier.dashboard"))
 
     form = DeliveryUpdateForm()
-    return render_template("courier/shipment_detail.html", s=s, form=form)
+    note_analysis = None
+    if s.delivery_notes:
+        try:
+            from ...ml import get_service
+            note_analysis = get_service().analyze_note(s.delivery_notes)
+        except Exception:  # pragma: no cover - never block the courier's page
+            note_analysis = None
+    return render_template("courier/shipment_detail.html", s=s, form=form,
+                           note_analysis=note_analysis)
 
 
 @bp.route("/shipment/<int:shipment_id>/deliver", methods=["POST"])
@@ -105,6 +142,8 @@ def mark_delivered(shipment_id):
             location=s.district or s.address,
             user=current_user,
         )
+        # GIS confirmation: geofence the actual delivery point vs. destination.
+        _confirm_and_resolve(s, form.deliver_lat.data, form.deliver_lon.data)
         # Free up the route slot.
         RouteStop.query.filter_by(shipment_id=s.id).delete()
         db.session.commit()

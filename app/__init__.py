@@ -54,6 +54,14 @@ def _bootstrap_database(app):
                     from seed import seed_data
                     seed_data()
                     app.logger.info("Seeded demo data on first boot.")
+                    # Train the predictive models once so the AI dashboard is
+                    # populated immediately. Best-effort: never block boot.
+                    try:
+                        from .ml import get_service
+                        get_service().ensure_trained()
+                        app.logger.info("Trained predictive models on first boot.")
+                    except Exception as exc:  # pragma: no cover
+                        app.logger.warning("Model training skipped: %s", exc)
             except Exception as exc:  # pragma: no cover - concurrent seed race
                 db.session.rollback()
                 app.logger.warning("Demo seed skipped (already running?): %s", exc)
@@ -136,3 +144,40 @@ def _register_cli(app):
         db.session.add(user)
         db.session.commit()
         click.echo(f"Admin {email} created.")
+
+    @app.cli.command("train-ml")
+    @click.option("--regenerate", is_flag=True,
+                  help="Rebuild the synthetic history before training.")
+    def train_ml(regenerate):
+        """Train the predictive models (drop-off, pickup, late-risk, forecast)."""
+        from .ml.train import train_all
+        m = train_all(regenerate=regenerate)
+        mm = m["models"]
+        click.echo(f"Trained on {m['n_rows']} records.")
+        click.echo(f"  Drop-off ETA : MAE {mm['dropoff']['mae']} min, R2 {mm['dropoff']['r2']}")
+        click.echo(f"  Pickup time  : MAE {mm['pickup']['mae']} min, R2 {mm['pickup']['r2']}")
+        click.echo(f"  Late-risk    : AUC {mm['late']['roc_auc']}, base {mm['late']['base_rate']}")
+        click.echo(f"  Forecast     : orders MAPE {mm['forecast']['orders_mape']}%, "
+                   f"cost MAPE {mm['forecast']['cost_mape']}%")
+
+    @app.cli.command("train-router")
+    def train_router_cmd():
+        """Train the learning-to-route pointer policy (neural router)."""
+        from .ml.neural_router import train_router, save_router
+        bundle, m = train_router()
+        save_router(bundle, m)
+        click.echo("Route policy trained.")
+        click.echo(f"  vs nearest-neighbour : {m['val_improve_vs_nn_pct']:+.2f}% shorter")
+        click.echo(f"  gap to 2-opt (sample): {m['val_sampled_gap_vs_two_opt_pct']:.2f}%")
+
+    @app.cli.command("train-behavior")
+    def train_behavior_cmd():
+        """Train the courier behaviour persona model."""
+        from .ml.behavior import train_behavior, save_behavior
+        bundle, m = train_behavior()
+        save_behavior(bundle, m)
+        click.echo("Courier behaviour model trained.")
+        click.echo(f"  shifts               : {m['n_shifts']}")
+        click.echo(f"  silhouette           : {m['silhouette']}")
+        click.echo(f"  ARI vs archetypes    : {m['adjusted_rand_vs_archetypes']}")
+        click.echo(f"  persona sizes        : {m['persona_sizes']}")
