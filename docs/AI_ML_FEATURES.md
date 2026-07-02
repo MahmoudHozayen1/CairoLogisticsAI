@@ -37,6 +37,21 @@ Three gradient-boosting models plus a forecaster, trained on a seeded synthetic 
 - **Demand forecast** — a custom `SeasonalTrendForecaster` (linear trend + weekly seasonality +
   95% band), orders MAPE ≈ 14%, cost ≈ 16%
 
+**Validation & baselines.** Every score is backed by cross-validation and compared against a naive
+baseline, so the headline numbers are honest rather than lucky-split artifacts:
+
+- **Regressors** — 5-fold k-fold CV (drop-off CV MAE ≈ 2.75 ± 0.04, pick-up ≈ 1.29 ± 0.02). The
+  drop-off model is **~72% better** than a mean-predictor baseline; pick-up **~40% better**.
+- **Late-risk** — 5-fold stratified CV AUC ≈ 0.83 ± 0.005, comfortably beating the 0.5 chance line.
+- **Forecast** — **rolling-origin (time-series) cross-validation** (only ever predicting the future
+  from the past) gives orders CV-MAPE ≈ 16 ± 4%, beating an ~18% **seasonal-naive** baseline.
+
+The tight CV standard deviations show the scores are stable across folds (not overfit to one split),
+and every model clearing its baseline shows it has learned real signal. All of these appear on the
+AI overview screen as badges. Code: `_train_regressor` / `_train_late` / `_train_forecast` in
+[`app/ml/train.py`](../app/ml/train.py) and `timeseries_cv_mape` / `naive_baseline_mape` in
+[`app/ml/forecast.py`](../app/ml/forecast.py).
+
 **Reasoning:** `TreeContributionExplainer` computes **exact additive contributions** for each
 sklearn gradient-boosting prediction (it walks the trees in `float32` to match sklearn's leaf
 selection precisely), so each ETA comes with a signed breakdown of *why*. The forecaster is

@@ -134,3 +134,68 @@ def backtest_mape(y: np.ndarray, dow: np.ndarray, holdout: int = 14) -> float:
     actual = y[-holdout:]
     mask = actual > 0
     return float(np.mean(np.abs((actual[mask] - pred[mask]) / actual[mask])) * 100.0)
+
+
+def _mape(actual: np.ndarray, pred: np.ndarray) -> float:
+    actual = np.asarray(actual, dtype=float)
+    pred = np.asarray(pred, dtype=float)
+    mask = actual > 0
+    if not mask.any():
+        return float("nan")
+    return float(np.mean(np.abs((actual[mask] - pred[mask]) / actual[mask])) * 100.0)
+
+
+def timeseries_cv_mape(y: np.ndarray, dow: np.ndarray, folds: int = 5,
+                       horizon: int = 14) -> dict:
+    """Rolling-origin (expanding-window) cross-validation for the forecaster.
+
+    Unlike a single trailing backtest, this refits the model at ``folds``
+    successive cut points and only ever predicts the future from the past — the
+    correct way to validate a time series. Returns the mean/std MAPE across
+    folds so the reported error carries an honest confidence interval.
+    """
+    y = np.asarray(y, dtype=float)
+    dow = np.asarray(dow, dtype=int)
+    n = len(y)
+    min_train = max(2 * horizon, 21)
+    if n < min_train + horizon:
+        return {"mean": float("nan"), "std": float("nan"), "folds": 0,
+                "scores": []}
+
+    # Evenly spaced cut points from the first valid origin to the last.
+    last_origin = n - horizon
+    first_origin = min_train
+    if folds > 1:
+        origins = np.linspace(first_origin, last_origin, folds).astype(int)
+    else:
+        origins = np.array([last_origin])
+    origins = np.unique(origins)
+
+    scores = []
+    for cut in origins:
+        f = SeasonalTrendForecaster().fit(y[:cut], dow[:cut])
+        fc = f.forecast(horizon, start_dow=int(dow[cut]))
+        score = _mape(y[cut:cut + horizon], np.array(fc["point"]))
+        if not np.isnan(score):
+            scores.append(score)
+    if not scores:
+        return {"mean": float("nan"), "std": float("nan"), "folds": 0,
+                "scores": []}
+    arr = np.array(scores)
+    return {"mean": float(arr.mean()), "std": float(arr.std()),
+            "folds": int(len(scores)), "scores": [round(float(s), 2) for s in arr]}
+
+
+def naive_baseline_mape(y: np.ndarray, horizon: int = 14,
+                        season: int = 7) -> float:
+    """Seasonal-naive baseline MAPE: predict each day from the same weekday a
+    ``season`` (default 7) days earlier. This is the bar any real forecaster
+    must clear — beating it is what makes the trend+seasonality model worthwhile.
+    """
+    y = np.asarray(y, dtype=float)
+    n = len(y)
+    if n <= horizon + season:
+        return float("nan")
+    actual = y[-horizon:]
+    pred = y[-horizon - season:-season]
+    return _mape(actual, pred)

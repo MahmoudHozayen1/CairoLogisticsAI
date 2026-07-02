@@ -52,7 +52,7 @@ full-resolution file. Regenerate the whole set anytime by running the app and th
 | AI overview (predictors + forecast) | Feedback loop & drift monitor |
 | --- | --- |
 | [![AI overview](screenshots/16-admin-ai-overview.png)](screenshots/16-admin-ai-overview.png) | [![AI feedback](screenshots/17-admin-ai-feedback.png)](screenshots/17-admin-ai-feedback.png) |
-| Drop-off/pick-up/late scorecards, demand forecast with a 95% band, and feature importances. | Back-tested MAE/bias/R², weekly drift, residuals and late-risk calibration. |
+| Drop-off/pick-up/late scorecards with cross-validated scores and naive-baseline comparisons, demand forecast with a 95% band, and feature importances. | Back-tested MAE/bias/R², weekly drift, residuals and late-risk calibration. |
 
 | Learning-to-route (neural router) | Courier behaviour — fleet |
 | --- | --- |

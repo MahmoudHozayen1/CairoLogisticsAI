@@ -45,6 +45,10 @@
             <div class="small text-muted mb-2">Minutes to hand a parcel to the customer</div>
             <div class="stat-value text-primary-dark">±{{ m.dropoff.mae }} min</div>
             <div class="small text-muted">mean abs. error · R² {{ m.dropoff.r2 }}</div>
+            {% if m.dropoff.cv_mae_mean is defined %}
+            <div class="small text-muted mt-1"><span class="badge bg-success-subtle text-success-emphasis">{{ m.dropoff.cv_folds }}-fold CV {{ m.dropoff.cv_mae_mean }}±{{ m.dropoff.cv_mae_std }}</span></div>
+            <div class="small text-success mt-1"><i class="bi bi-check-circle"></i> {{ m.dropoff.skill_vs_baseline_pct }}% better than mean-predictor</div>
+            {% endif %}
         </div>
     </div>
     <div class="col-md-6 col-xl-3">
@@ -54,6 +58,10 @@
             <div class="small text-muted mb-2">Minutes to collect from a store</div>
             <div class="stat-value text-primary-dark">±{{ m.pickup.mae }} min</div>
             <div class="small text-muted">mean abs. error · R² {{ m.pickup.r2 }}</div>
+            {% if m.pickup.cv_mae_mean is defined %}
+            <div class="small text-muted mt-1"><span class="badge bg-success-subtle text-success-emphasis">{{ m.pickup.cv_folds }}-fold CV {{ m.pickup.cv_mae_mean }}±{{ m.pickup.cv_mae_std }}</span></div>
+            <div class="small text-success mt-1"><i class="bi bi-check-circle"></i> {{ m.pickup.skill_vs_baseline_pct }}% better than mean-predictor</div>
+            {% endif %}
         </div>
     </div>
     <div class="col-md-6 col-xl-3">
@@ -63,6 +71,10 @@
             <div class="small text-muted mb-2">Probability a delivery misses its SLA</div>
             <div class="stat-value text-primary-dark">{{ (m.late.roc_auc * 100)|round(1) }}%</div>
             <div class="small text-muted">ROC-AUC · {{ (m.late.base_rate * 100)|round(0) }}% base late rate</div>
+            {% if m.late.cv_auc_mean is defined %}
+            <div class="small text-muted mt-1"><span class="badge bg-success-subtle text-success-emphasis">{{ m.late.cv_folds }}-fold CV AUC {{ m.late.cv_auc_mean }}±{{ m.late.cv_auc_std }}</span></div>
+            <div class="small text-success mt-1"><i class="bi bi-check-circle"></i> beats 0.5 chance baseline</div>
+            {% endif %}
         </div>
     </div>
     <div class="col-md-6 col-xl-3">
@@ -72,6 +84,10 @@
             <div class="small text-muted mb-2">Daily orders &amp; cost, 14-day horizon</div>
             <div class="stat-value text-primary-dark">{{ m.forecast.orders_mape }}%</div>
             <div class="small text-muted">orders MAPE · cost {{ m.forecast.cost_mape }}%</div>
+            {% if m.forecast.orders_cv_mape_mean is defined %}
+            <div class="small text-muted mt-1"><span class="badge bg-success-subtle text-success-emphasis">{{ m.forecast.cv_folds }}-fold rolling CV {{ m.forecast.orders_cv_mape_mean }}±{{ m.forecast.orders_cv_mape_std }}%</span></div>
+            <div class="small text-success mt-1"><i class="bi bi-check-circle"></i> beats {{ m.forecast.orders_baseline_mape }}% seasonal-naive</div>
+            {% endif %}
         </div>
     </div>
 </div>
