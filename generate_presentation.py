@@ -90,6 +90,43 @@ SLIDES = [
         "On solvable instances, Or-opt is ~0.1% above optimal; 2-opt & SA < 1%.",
         "2-opt gives the best quality/speed balance; Christofides scales gently.",
     ], "runtime_scaling.png"),
+    ("Predictive Intelligence Layer", [
+        "Explainable ML on numpy / scikit-learn \u2014 no GPU, deploys on a free tier.",
+        "Five slices: ETA & forecasting, feedback/audit, NLP & assistant, learning-to-route, personas.",
+        "Trained on a seeded, reproducible synthetic history (~5.8k deliveries / 180 days).",
+        "Guiding principle: every prediction reports its reasoning.",
+    ], None),
+    ("ETA & Late-Risk + Validation", [
+        "Gradient-boosting models: drop-off time, pickup time, late-risk.",
+        "Shared train/serve features; exact additive explanations per prediction.",
+        "Validated with 5-fold CV vs naive baselines.",
+        "Drop-off MAE 2.75\u00b10.04 (72% better than mean); late-risk CV AUC 0.83.",
+    ], None),
+    ("Demand & Cost Forecasting", [
+        "White-box SeasonalTrendForecaster: trend + weekly seasonality + 95% band.",
+        "Rolling-origin (time-series) CV: orders MAPE ~16% vs ~18.5% seasonal-naive.",
+        "Self-explaining: baseline level, growth/day, best/worst weekday, uncertainty.",
+    ], None),
+    ("Handling-Note NLP & Assistant", [
+        "Hybrid tagger (regex lexicon + TF-IDF logistic regression), 10-tag taxonomy.",
+        "Extracts delivery time windows and target floor; per-tag token contributions.",
+        "Assistant: natural-language Q&A grounded in live data \u2014 every answer lists its sources.",
+    ], None),
+    ("Learning-to-Route (Neural Policy)", [
+        "Pure-numpy pointer policy; REINFORCE with a greedy-rollout baseline.",
+        "Best-of-N rollouts: ~5% shorter than nearest-neighbour, ~2% off 2-opt.",
+        "Each pick reports its top feature reasons \u2014 a modern RL take on routing.",
+    ], None),
+    ("Courier-Behaviour Personas", [
+        "Mine GPS traces for stops \u2192 behavioural features \u2192 K-Means personas.",
+        "Ranked by productivity; evaluated with silhouette + adjusted Rand index.",
+        "Honest caveat: the ground-truth archetypes are synthetic.",
+    ], None),
+    ("Trust: Audit, GIS & Drift", [
+        "SHA-256 hash-chained chain-of-custody \u2014 tamper-detectable handoffs.",
+        "GIS geofence confirms delivery at the destination.",
+        "Feedback loop: predicted-vs-actual logging, drift trigger, late-risk calibration.",
+    ], None),
     ("Shipment Lifecycle", [
         "pending \u2192 at_warehouse \u2192 out_for_delivery \u2192 delivered.",
         "Plus failed, returned and cancelled states.",
@@ -98,9 +135,8 @@ SLIDES = [
     ], None),
     ("Difficult Choices & Trade-offs", [
         "SQLite vs PostgreSQL \u2192 support both via one DATABASE_URL.",
-        "Heavy ML libraries \u2192 made optional, never required.",
-        "Global vs project .env \u2192 self-contained config (a real bug we fixed).",
-        "Geocoding vs \u201cdrop a pin\u201d \u2192 map pin + landmark text.",
+        "Heavy ML libraries \u2192 optional/light (no torch); models train in seconds.",
+        "Synthetic data \u2192 reproducible, honestly labelled, validated with CV + baselines.",
         "SPA vs server-rendered \u2192 server-rendered, single stack.",
     ], None),
     ("Security", [
@@ -113,19 +149,19 @@ SLIDES = [
         "Merchant creates a shipment by dropping a pin on the map.",
         "Admin marks it At-Warehouse and runs the optimiser.",
         "Courier sees the route, delivers, captures proof of delivery.",
-        "Anyone tracks the parcel publicly by its number.",
+        "Anyone tracks the parcel publicly; admin explores the AI dashboards.",
     ], None),
     ("Testing & Quality", [
-        "End-to-end tests over the real create \u2192 optimise \u2192 deliver \u2192 track flow.",
-        "Role-protection tests ensure permissions hold.",
-        "Optimiser test verifies routes are assigned and measured.",
+        "74 automated tests over the real create \u2192 optimise \u2192 deliver \u2192 track flow.",
+        "Role-protection tests ensure permissions hold; a test verifies every optimiser technique.",
+        "The entire ML layer is tested: ETA/forecast, audit/GIS, NLP/assistant, router, personas.",
         "All tests pass on the in-memory database.",
     ], None),
     ("Future Work", [
-        "SMS / email notifications on status changes.",
-        "Cash-on-delivery settlement and merchant payouts.",
-        "Live GPS tracking and a native courier mobile app.",
-        "ML-driven demand forecasting and dynamic re-routing.",
+        "A true capacitated VRP solver (OR-Tools) with time windows.",
+        "Validate the predictive models on real operational data.",
+        "Live GPS tracking and dynamic re-routing around incidents.",
+        "SMS / email notifications and cash-on-delivery settlement.",
     ], None),
     ("Thank You", [
         "Questions & discussion.",

@@ -121,7 +121,45 @@ change name, email, phone, hub, vehicle, or reset the password), and **activate/
 
 ---
 
-## 5. REST API (for developers)
+## 5. Admin — AI / Data Science suite
+
+All of these live under the **AI** menu (`/admin/ai`). Models train automatically the first time you
+open the page (or click **Train models**); everything is explainable — each prediction lists *why*.
+
+### AI overview (`/admin/ai`)
+- Scorecards for **drop-off time**, **pickup time**, **late risk** and the **demand forecast**, each
+  showing its headline score, its **cross-validated** score (e.g. 5-fold CV MAE) and how much it
+  **beats a naive baseline** (e.g. "72% better than mean-predictor").
+- A 14-day **orders & cost forecast** with a 95% band, plus plain-language reasoning and feature
+  importances.
+
+### Feedback loop & drift (`/admin/ai/feedback`)
+- Back-tested MAE / bias / R², **week-over-week drift** with a retrain trigger, a residual histogram
+  and the **late-risk calibration** curve (with Brier score). Live predicted-vs-actual logs close the
+  loop on real shipments.
+
+### Learning-to-route — neural router (`/admin/ai/router`)
+- Pick a hub; the **pointer-network policy** sequences its parcels and is compared to
+  nearest-neighbour. Each pick shows its top feature reasons, plus the learned weights and a learning
+  curve. *(Needs ≥ 3 parcels at the hub and a trained router — run `flask --app run train-router`.)*
+
+### Courier behaviour — personas (`/admin/ai/behavior`)
+- Fleet view: the **persona mix** (efficient / steady / idle-prone / wanderer), a ranked roster and
+  productivity scores. Click a courier for a state-coded GPS map (driving / delivery / break / idle),
+  time budget and z-score reasoning.
+
+### Operations assistant (`/admin/ai/assistant`)
+- A chatbot that answers questions in natural language ("how many parcels are late risk today?")
+  grounded in live database facts — **every answer lists its sources**. Works fully offline; uses a
+  local Ollama LLM only to phrase the retrieved facts when one is available.
+
+### Network audit integrity (`/admin/audit`)
+- Chain-of-custody integrity across every shipment: the SHA-256 handoff ledger is recomputed to prove
+  nothing was tampered with, and GIS delivery confirmations are summarised.
+
+---
+
+## 6. REST API (for developers)
 
 | Endpoint | Auth | Returns |
 |----------|------|---------|
@@ -136,7 +174,7 @@ curl http://127.0.0.1:5000/api/track/SR-7F3K9Q2A
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|

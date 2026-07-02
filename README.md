@@ -18,7 +18,7 @@
 | **Multi-role auth** | Admin, Courier and Merchant portals with role-based access control. |
 | **Merchant portal** | Create shipments by dropping a pin on a map, set COD, track every parcel. |
 | **AI route optimisation** | k-means clustering per courier + 6 TSP techniques (greedy, 2-opt, Or-opt, NetworkX Christofides & Simulated Annealing), benchmarked. |
-| **Predictive ML suite** | Explainable ETA & late-risk models, demand forecasting, a learning-to-route neural policy, courier-behaviour personas, handling-note NLP and a data-grounded operations assistant — see **[docs/AI_ML_FEATURES.md](docs/AI_ML_FEATURES.md)**. |
+| **Predictive ML suite** | Explainable ETA & late-risk models (cross-validated against naive baselines), demand forecasting, a learning-to-route neural policy, courier-behaviour personas, handling-note NLP and a data-grounded operations assistant — see **[docs/AI_ML_FEATURES.md](docs/AI_ML_FEATURES.md)**. |
 | **Trust & audit** | SHA-256 hash-chained chain-of-custody, GIS delivery confirmation, and a model feedback/drift monitor. |
 | **Street-following routes** | Real road geometry via OSRM (cached, with offline fallback). |
 | **Live traffic & closures** | Routes coloured by simulated, time-of-day congestion; admins mark road closures that the optimiser re-routes around. |
@@ -64,7 +64,8 @@ config.py                 → environment-driven config (SQLite default, Postgre
 app/
 ├── __init__.py           → application factory, blueprints, CLI commands
 ├── extensions.py         → db, login, migrate, csrf
-├── models.py             → User, Hub, Shipment, ShipmentEvent, RouteStop, RoadClosure
+├── models.py             → User, Hub, Shipment, ShipmentEvent, RouteStop, RoadClosure,
+│                            HandoffRecord, DeliveryConfirmation, PredictionLog
 ├── forms.py              → WTForms (validation + CSRF)
 ├── utils.py              → role decorators, tracking numbers, uploads
 ├── routing/
@@ -76,8 +77,8 @@ app/
 ├── templates/            → Jinja2 + Bootstrap 5 + Leaflet
 └── static/               → CSS + proof-of-delivery uploads
 seed.py                   → realistic demo data
-tests/test_app.py         → end-to-end lifecycle tests
-docs/                     → design decisions, user guide, presentation
+tests/                    → 74 tests: lifecycle, optimiser, ML, audit, NLP, router, behaviour
+docs/                     → design decisions, user guide, AI/ML guide, presentation, report
 ```
 
 See [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) for the engineering trade-offs and
@@ -277,7 +278,7 @@ flask --app run train-behavior # courier-behaviour personas
 ## 📦 Tech stack
 
 Flask · SQLAlchemy · Flask-Login · Flask-Migrate · Flask-WTF · Bootstrap 5 · Leaflet ·
-Chart.js · scikit-learn/OSMnx (optional) · PostgreSQL / SQLite.
+Chart.js · scikit-learn · pandas · NumPy · NetworkX · OSMnx (optional) · PostgreSQL / SQLite.
 
 ## 📄 License
 

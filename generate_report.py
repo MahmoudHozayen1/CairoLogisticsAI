@@ -167,6 +167,13 @@ def abstract(doc):
          "to the exact optimum on small instances, and runtime. The optimised techniques reduce total "
          "courier distance by roughly 60% versus naive dispatch and come within a fraction of a percent "
          "of optimal, giving an empirically grounded justification for the engine's design.")
+    para(doc,
+         "The platform also carries an explainable predictive layer built on scikit-learn: "
+         "cross-validated ETA and late-risk models, a transparent seasonal demand forecaster, "
+         "handling-note NLP, a reinforcement-learned pointer policy for routing, and courier-behaviour "
+         "clustering. Every model reports its reasoning and is validated with cross-validation against a "
+         "naive baseline, so the accuracy figures reflect genuine generalisation rather than a favourable "
+         "data split.")
     doc.add_page_break()
 
 
@@ -195,6 +202,7 @@ def introduction(doc):
         "Implement an optimisation engine that clusters parcels, assigns them under capacity limits, and sequences each route.",
         "Provide multiple, interchangeable optimisation techniques spanning heuristics, an approximation algorithm, and a metaheuristic.",
         "Empirically benchmark the techniques and quantify their savings, optimality gap and runtime.",
+        "Add an explainable predictive layer (ETA, late-risk, demand forecasting, NLP, learning-to-route and behaviour personas), validated with cross-validation against naive baselines.",
         "Keep heavy scientific dependencies optional so the system always runs.",
     ])
 
@@ -356,33 +364,132 @@ def results(doc, summary):
          "graph-based option for larger routes.")
 
 
+def ml_layer(doc):
+    h1(doc, "7. Predictive Intelligence Layer (AI/ML)")
+    para(doc,
+         "Beyond route optimisation, SwiftRoute includes an explainable machine-learning layer that turns "
+         "the platform into a genuine data-science system. It is built entirely on numpy, scikit-learn and "
+         "pandas \u2014 no deep-learning runtime \u2014 so it trains in seconds and deploys on a free tier. "
+         "A guiding principle is that every prediction reports its reasoning: nothing is an opaque black "
+         "box. The models are trained on a seeded, reproducible synthetic history of roughly 5,800 "
+         "deliveries spanning 180 days.")
+
+    h2(doc, "7.1 ETA and Late-Risk Prediction")
+    para(doc,
+         "Three gradient-boosting models estimate operational outcomes for a shipment: the drop-off time "
+         "(minutes to hand the parcel to the customer), the pickup time at the store, and the probability "
+         "that a delivery misses its service-level agreement. A single shared feature pipeline "
+         "(haversine distance, time-of-day and day-of-week traffic factor, store congestion, vehicle speed "
+         "and the promised SLA) feeds both training and live serving, eliminating training/serving skew. "
+         "Each prediction is accompanied by an exact additive explanation produced by a custom "
+         "TreeContributionExplainer, which walks the gradient-boosting trees to recover the signed "
+         "contribution of every feature.")
+
+    h2(doc, "7.2 Validation: Cross-Validation and Baselines")
+    para(doc,
+         "To ensure the reported accuracy reflects genuine generalisation rather than a lucky train/test "
+         "split, every model is validated with k-fold cross-validation and compared against a naive "
+         "baseline. The regressors use 5-fold cross-validation; the late-risk classifier uses stratified "
+         "5-fold; and the forecaster uses rolling-origin (time-series) cross-validation, which only ever "
+         "predicts the future from the past. The tight cross-validation standard deviations demonstrate "
+         "that the scores are stable across folds, and each model comfortably clears its baseline, "
+         "confirming it has learned real signal.")
+    table = doc.add_table(rows=1, cols=5)
+    table.style = "Light Grid Accent 1"
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    hdr = table.rows[0].cells
+    for i, text in enumerate(["Model", "Headline score", "Cross-validated", "Baseline", "Skill vs baseline"]):
+        hdr[i].text = text
+        for p in hdr[i].paragraphs:
+            for r in p.runs:
+                r.font.bold = True
+    ml_rows = [
+        ("Drop-off ETA (regressor)", "MAE 2.74 min, R2 0.94", "CV MAE 2.75 +/- 0.04", "Mean-predictor 9.78 min", "72% lower error"),
+        ("Pick-up ETA (regressor)", "MAE 1.26 min, R2 0.63", "CV MAE 1.29 +/- 0.02", "Mean-predictor", "40% lower error"),
+        ("Late-risk (classifier)", "ROC-AUC 0.82", "CV AUC 0.83 +/- 0.005", "Chance AUC 0.50", "Clears chance"),
+        ("Demand forecast", "Orders MAPE 14.4%", "Rolling-origin CV 16.0 +/- 3.7%", "Seasonal-naive 18.5%", "Beats naive"),
+    ]
+    for r0, r1, r2, r3, r4 in ml_rows:
+        cells = table.add_row().cells
+        cells[0].text, cells[1].text, cells[2].text, cells[3].text, cells[4].text = r0, r1, r2, r3, r4
+    para(doc, "")
+
+    h2(doc, "7.3 Demand and Cost Forecasting")
+    para(doc,
+         "A deliberately white-box SeasonalTrendForecaster decomposes daily order volume and cost into a "
+         "linear trend plus additive weekly seasonality, with a 95% prediction band from the residual "
+         "spread. Because every component is explicit, the forecast explains itself in plain language "
+         "(baseline level, growth per day, best and worst weekdays and the uncertainty band) rather than "
+         "hiding behind an opaque model.")
+
+    h2(doc, "7.4 Handling-Note NLP")
+    para(doc,
+         "Free-text delivery instructions are analysed by a hybrid multi-label classifier over a ten-tag "
+         "taxonomy (fragile, do-not-stack, time-window, call-ahead and so on). A regex lexicon layer gives "
+         "reliable coverage, and a learned TF-IDF plus one-vs-rest logistic-regression model generalises to "
+         "unseen wording (for example \u2018the vase can shatter\u2019 maps to fragile). The model also "
+         "extracts explicit delivery time windows and target floors, and each tag reports the exact token "
+         "contributions that triggered it.")
+
+    h2(doc, "7.5 Learning-to-Route Neural Policy")
+    para(doc,
+         "A pure-numpy pointer-network-style policy learns to sequence a courier\u2019s stops using a "
+         "linear-softmax attention over seven scale-normalised geometric features. It is trained with "
+         "REINFORCE and a greedy-rollout baseline using an exact softmax policy gradient (no autodiff). At "
+         "inference, best-of-N sampled rollouts produce tours roughly 5% shorter than nearest-neighbour and "
+         "within about 2% of a 2-opt reference, and every pick reports its top feature contributions. This "
+         "demonstrates a modern reinforcement-learning approach to routing alongside the classical "
+         "heuristics of Chapter 6.")
+
+    h2(doc, "7.6 Courier-Behaviour Personas")
+    para(doc,
+         "Simulated GPS traces are mined for stop events (from dwell time and speed) and summarised into "
+         "behavioural features, which K-Means then clusters into interpretable courier personas ranked by "
+         "productivity. The clustering is evaluated with a silhouette score and, against the known "
+         "simulation archetypes, a very high adjusted Rand index \u2014 an honest note in the report is that "
+         "this validation is circular because the ground truth is synthetic.")
+
+    h2(doc, "7.7 Feedback Loop, Drift and Chain-of-Custody Audit")
+    para(doc,
+         "Predictions are logged at dispatch and resolved at delivery, so the system measures live "
+         "predicted-versus-actual error, week-over-week drift (the retraining trigger) and late-risk "
+         "calibration. Independently, every status change appends a SHA-256 hash-chained handoff record "
+         "(merchant to hub to courier to customer) that can be recomputed to detect tampering, and a GIS "
+         "geofence confirms the delivery occurred at the destination.")
+
+
 def engineering(doc):
-    h1(doc, "7. Engineering, Security and Testing")
-    h2(doc, "7.1 Security")
+    h1(doc, "8. Engineering, Security and Testing")
+    h2(doc, "8.1 Security")
     bullets(doc, [
         "Passwords hashed with Werkzeug (PBKDF2); CSRF protection on every browser form.",
         "Role-based access control enforced by a decorator; server-side validation and open-redirect protection.",
     ])
-    h2(doc, "7.2 Testing")
+    h2(doc, "8.2 Testing")
     para(doc,
-         "An automated test suite covers the full lifecycle (create \u2192 optimise \u2192 deliver \u2192 "
-         "track), role protection, the traffic and closure model, dispatch-time planning, capacity limits, "
-         "and a dedicated test that verifies every optimisation technique \u2014 including the NetworkX "
-         "strategies \u2014 returns a valid route that beats the FIFO baseline.")
+         "An automated suite of 74 tests covers the full lifecycle (create \u2192 optimise \u2192 deliver "
+         "\u2192 track), role protection, the traffic and closure model, dispatch-time planning, capacity "
+         "limits, a dedicated test that verifies every optimisation technique \u2014 including the NetworkX "
+         "strategies \u2014 returns a valid route that beats the FIFO baseline, and the entire predictive "
+         "layer: the ETA/forecast models, the chain-of-custody and GIS audit, the handling-note NLP and "
+         "assistant, the neural router and the courier-behaviour personas.")
 
 
 def conclusion(doc):
-    h1(doc, "8. Conclusion and Future Work")
+    h1(doc, "9. Conclusion and Future Work")
     para(doc,
          "SwiftRoute delivers a complete logistics platform whose optimisation engine is not merely "
          "plausible but empirically validated. Benchmarking six techniques shows that automated planning "
          "cuts courier distance by around 60% versus naive dispatch and reaches within a fraction of a "
          "percent of optimal, while the technique catalogue spans a formal approximation algorithm and a "
-         "metaheuristic for academic breadth.")
+         "metaheuristic for academic breadth. On top of this, an explainable predictive layer \u2014 "
+         "cross-validated ETA and late-risk models, a transparent demand forecaster, handling-note NLP, a "
+         "learning-to-route neural policy and courier-behaviour clustering \u2014 turns the platform into a "
+         "genuine data-science system in which every prediction reports its reasoning.")
     para(doc, "Future work includes:")
     bullets(doc, [
         "A true capacitated VRP solver (e.g. Google OR-Tools) with time windows.",
-        "Demand forecasting to pre-position couriers using historical volume.",
+        "Validating the predictive models on real operational data to complement the synthetic study.",
         "Live GPS tracking and dynamic re-routing around real-time incidents.",
         "Notifications (SMS/email) and cash-on-delivery settlement.",
     ])
@@ -423,6 +530,7 @@ def build():
     methodology(doc)
     experiment(doc, summary)
     results(doc, summary)
+    ml_layer(doc)
     engineering(doc)
     conclusion(doc)
     references(doc)

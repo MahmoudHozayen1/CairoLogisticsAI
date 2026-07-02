@@ -8,7 +8,7 @@ them in sync.
 
 ### Slide 1 — Title
 - **SwiftRoute** — AI-Assisted Logistics & Parcel Delivery Platform
-- Graduation Project · inspired by Bosta & DHL
+- Graduation Project · inspired by Bosta & DHL · a data-science team of 4
 - Your name(s), supervisor, date
 
 ### Slide 2 — The Problem
@@ -18,13 +18,13 @@ them in sync.
 
 ### Slide 3 — Project Goal
 - Build a complete, real-world logistics platform — not a prototype.
-- Merchants ship, AI plans routes, couriers deliver, customers track.
-- Python-first, web-based, runnable anywhere.
+- Merchants ship, AI plans routes, models predict outcomes, couriers deliver, customers track.
+- Python-first, web-based, runnable anywhere; every prediction explains itself.
 
 ### Slide 4 — Inspiration: Bosta & DHL
 - Bosta: merchant onboarding, COD, status timeline, courier app.
 - DHL: hub-and-spoke network, tracking numbers, proof of delivery.
-- We replicate the core ideas at graduation-project scale.
+- We replicate the core ideas at graduation-project scale, then add a data-science layer.
 
 ### Slide 5 — System Overview
 - Four actors: Admin, Courier, Merchant, Public customer.
@@ -34,42 +34,82 @@ them in sync.
 ### Slide 6 — Architecture
 - Application factory + blueprints (auth, admin, courier, merchant, tracking, api).
 - SQLAlchemy models; SQLite by default, PostgreSQL-ready.
-- Jinja2 + Bootstrap + Leaflet + Chart.js front-end.
+- Jinja2 + Bootstrap + Leaflet + Chart.js front-end; ML layer in `app/ml/`.
 
 ### Slide 7 — Data Model
-- User (admin/courier/merchant, one table + role).
-- Hub, Shipment, ShipmentEvent (append-only timeline), RouteStop (map geometry).
+- User (admin/courier/merchant, one table + role); Hub, Shipment, ShipmentEvent (append-only).
+- RouteStop (map geometry); RoadClosure; plus ML tables: HandoffRecord, DeliveryConfirmation, PredictionLog.
 
 ### Slide 8 — The AI Route Optimiser
 - Vehicle routing is NP-hard → decomposed:
   1. k-means clustering (which courier).
-  2. nearest-neighbour + 2-opt (what order — the TSP).
-  3. OSMnx/Dijkstra street paths (optional) + ETA.
+  2. capacity-aware assignment.
+  3. TSP sequencing (what order) + OSRM street paths + ETA.
 - Pure-Python fallbacks → always runs.
 
-### Slide 9 — Shipment Lifecycle
-- pending → at_warehouse → out_for_delivery → delivered.
-- plus failed / returned / cancelled.
+### Slide 9 — Optimisation Benchmark (data science)
+- Six techniques: FIFO, Nearest-Neighbour, 2-opt, Or-opt, Christofides (NetworkX), Simulated Annealing.
+- Reproducible sweep (seed 42) over many synthetic scenarios; measures distance, savings, optimality gap, runtime.
+- Result: optimised methods cut distance ~60% vs FIFO and land within ~0.1–1% of optimal.
+
+### Slide 10 — Predictive Intelligence Layer
+- Explainable ML on numpy / scikit-learn — no GPU, deploys on a free tier.
+- Five slices: ETA & forecasting, feedback/audit, NLP & assistant, learning-to-route, behaviour personas.
+- Trained on a seeded, reproducible synthetic history (~5.8k deliveries over 180 days).
+
+### Slide 11 — ETA & Late-Risk + Validation
+- Gradient-boosting models: drop-off time, pickup time, late-risk; shared train/serve features.
+- Exact additive explanations (TreeContributionExplainer) — every prediction says *why*.
+- **Validated:** 5-fold CV + naive baselines — drop-off MAE 2.75±0.04 (72% better than mean), late-risk CV AUC 0.83.
+
+### Slide 12 — Demand & Cost Forecasting
+- White-box SeasonalTrendForecaster: linear trend + weekly seasonality + 95% band.
+- Rolling-origin (time-series) CV: orders MAPE ~16% vs ~18.5% seasonal-naive baseline.
+- Self-explaining: baseline level, growth/day, best/worst weekday, uncertainty.
+
+### Slide 13 — Handling-Note NLP & Assistant
+- Hybrid multi-label tagger (regex lexicon + TF-IDF logistic regression) over a 10-tag taxonomy.
+- Extracts delivery time windows and target floor; per-tag token contributions.
+- Operations assistant: natural-language Q&A grounded in live data — every answer lists its sources.
+
+### Slide 14 — Learning-to-Route (neural policy)
+- Pure-numpy pointer policy; REINFORCE with greedy-rollout baseline (exact softmax gradient).
+- Best-of-N rollouts: ~5% shorter than nearest-neighbour, ~2% off a 2-opt reference.
+- Each pick reports its top feature reasons; a modern RL counterpart to the classical heuristics.
+
+### Slide 15 — Courier-Behaviour Personas
+- Mine GPS traces for stop events → behavioural features → K-Means personas ranked by productivity.
+- Evaluated with silhouette + adjusted Rand index (honest caveat: ground truth is synthetic).
+- State-coded GPS map: driving / delivery / break / idle, with z-score reasoning.
+
+### Slide 16 — Trust: Audit, GIS & Drift
+- SHA-256 hash-chained chain-of-custody (merchant → hub → courier → customer); tamper-detectable.
+- GIS geofence confirms delivery at the destination.
+- Feedback loop: predicted-vs-actual logging, week-over-week drift trigger, late-risk calibration.
+
+### Slide 17 — Shipment Lifecycle
+- pending → at_warehouse → out_for_delivery → delivered (plus failed / returned / cancelled).
 - Every change is an immutable event the customer can see.
 
-### Slide 10 — Difficult Choices & Trade-offs
+### Slide 18 — Difficult Choices & Trade-offs
 - SQLite vs PostgreSQL → both, via one env var.
-- Heavy ML deps → optional, never required.
-- Global vs project `.env` → self-contained config (a real bug we fixed).
-- Geocoding vs "drop a pin" → map pin + landmark.
-- SPA vs server-rendered → server-rendered, one stack.
+- Heavy ML deps → optional/light (no torch); models train in seconds.
+- Synthetic data → reproducible and honestly labelled; validated with CV + baselines.
+- Server-rendered vs SPA → server-rendered, one stack.
 
-### Slide 11 — Security
+### Slide 19 — Security
 - Hashed passwords, CSRF, role-based access, server-side validation, open-redirect protection.
 
-### Slide 12 — Live Demo Flow
-- Merchant creates shipment → Admin optimises → Courier delivers → Public tracking.
+### Slide 20 — Live Demo Flow
+- Merchant creates shipment → Admin optimises → Courier delivers → Public tracking → AI dashboards.
 
-### Slide 13 — Testing & Quality
-- End-to-end tests over the real lifecycle; role-protection checks; optimiser test.
+### Slide 21 — Testing & Quality
+- 74 automated tests: full lifecycle, role protection, optimiser, and the entire ML layer
+  (ETA/forecast, audit/GIS, NLP/assistant, neural router, behaviour personas).
 
-### Slide 14 — Future Work
-- SMS/email notifications, COD settlement, live GPS, native courier app, analytics ML.
+### Slide 22 — Future Work
+- True capacitated VRP (OR-Tools) with time windows; validate models on real operational data.
+- Live GPS + dynamic re-routing; SMS/email notifications; COD settlement.
 
-### Slide 15 — Thank You
+### Slide 23 — Thank You
 - Repo link, demo accounts, Q&A.
